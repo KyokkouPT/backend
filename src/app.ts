@@ -20,6 +20,10 @@ import { inviteRoutes } from "./routes/invites.js";
 import { requestRoutes } from "./routes/requests.js";
 import { topRoutes } from "./routes/top.js";
 import { userRoutes } from "./routes/users.js";
+import { settingsRoutes } from "./routes/settings.js";
+import { staffAdminRoutes } from "./routes/staff-admin.js";
+import { appealRoutes } from "./routes/appeals.js";
+import { reportRoutes } from "./routes/reports.js";
 
 export type AppDeps = {
   db: Db;
@@ -98,6 +102,10 @@ export function buildApp(deps: AppDeps, options: FastifyServerOptions = {}): Fas
   app.register(requestRoutes({ db: deps.db }));
   app.register(topRoutes({ db: deps.db }));
   app.register(userRoutes({ db: deps.db }));
+  app.register(settingsRoutes({ db: deps.db }));
+  app.register(staffAdminRoutes({ db: deps.db }));
+  app.register(appealRoutes({ db: deps.db }));
+  app.register(reportRoutes({ db: deps.db }));
 
   return app;
 }

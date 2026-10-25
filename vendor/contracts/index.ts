@@ -586,3 +586,198 @@ export const userProfile = z.object({
   published: z.array(torrentSummary),
 });
 export type UserProfile = z.infer<typeof userProfile>;
+
+/* ============================ 设置 / 2FA ============================ */
+
+export const meSettingsResponse = z.object({
+  username: z.string(),
+  email: z.string(),
+  passkey: z.string(),
+  role,
+  class_key: z.string(),
+  twofa_enabled: z.boolean(),
+});
+export type MeSettingsResponse = z.infer<typeof meSettingsResponse>;
+
+export const updateMeSettingsBody = z.object({
+  email: z.string().email().max(190).optional(),
+  password: z.string().min(8).max(200).optional(),
+  current_password: z.string().max(200).optional(),
+});
+export type UpdateMeSettingsBody = z.infer<typeof updateMeSettingsBody>;
+
+export const twofaSetupResponse = z.object({
+  secret: z.string(),
+  otpauth_url: z.string(),
+});
+export type TwofaSetupResponse = z.infer<typeof twofaSetupResponse>;
+
+export const twofaCodeBody = z.object({ code: z.string().min(6).max(6) });
+export const twofaPasswordBody = z.object({ password: z.string().min(1) });
+export const twofaEnableResponse = z.object({ recovery_codes: z.array(z.string()) });
+export type TwofaEnableResponse = z.infer<typeof twofaEnableResponse>;
+
+export const preferencesResponse = z.object({
+  email_review: z.boolean(),
+  email_hnr: z.boolean(),
+  email_invite: z.boolean(),
+  email_social: z.boolean(),
+  email_weekly: z.boolean(),
+  public_seeding: z.boolean(),
+  public_published: z.boolean(),
+  searchable: z.boolean(),
+});
+export type PreferencesResponse = z.infer<typeof preferencesResponse>;
+
+export const updatePreferencesBody = preferencesResponse.partial();
+export type UpdatePreferencesBody = z.infer<typeof updatePreferencesBody>;
+
+/* ============================ Staff ============================ */
+
+export const staffSummaryResponse = z.object({
+  pending_review: z.number().int(),
+  open_reports: z.number().int(),
+  anomalies: z.number().int(),
+  users: z.number().int(),
+  torrents: z.number().int(),
+  schema_version: z.number().int(),
+});
+export type StaffSummaryResponse = z.infer<typeof staffSummaryResponse>;
+
+export const staffUserItem = z.object({
+  id: z.number().int(),
+  username: z.string(),
+  email: z.string(),
+  role,
+  class_key: z.string(),
+  status: userStatus,
+  uploaded: z.number(),
+  downloaded: z.number(),
+  ratio: z.number().nullable(),
+  bonus: z.number(),
+  created_at: z.number(),
+  last_seen_at: z.number().nullable(),
+});
+export type StaffUserItem = z.infer<typeof staffUserItem>;
+
+export const staffUsersResponse = z.object({ items: z.array(staffUserItem) });
+export type StaffUsersResponse = z.infer<typeof staffUsersResponse>;
+
+export const staffActionBody = z.object({ reason: z.string().max(500).optional() });
+export const staffActionResponse = z.object({
+  ok: z.boolean(),
+  status: z.string(),
+  message: z.string(),
+});
+export type StaffActionResponse = z.infer<typeof staffActionResponse>;
+
+export const reportItem = z.object({
+  id: z.number().int(),
+  reporter: z.string().nullable(),
+  target_type: z.string(),
+  target_id: z.string(),
+  target_label: z.string(),
+  reason: z.string(),
+  detail: z.string().nullable(),
+  status: z.string(),
+  created_at: z.number(),
+  resolved_at: z.number().nullable(),
+});
+export type ReportItem = z.infer<typeof reportItem>;
+
+export const reportsResponse = z.object({ items: z.array(reportItem) });
+export type ReportsResponse = z.infer<typeof reportsResponse>;
+
+export const resolveReportBody = z.object({
+  action: z.enum(["resolve", "dismiss"]),
+  reason: z.string().max(500).optional(),
+});
+
+export const anomalyItem = z.object({
+  id: z.number().int(),
+  user: z.object({ name: z.string(), hue: z.number().int() }),
+  kind: z.string(),
+  severity: z.string(),
+  status: z.string(),
+  detail: z.string().nullable(),
+  created_at: z.number(),
+  resolved_at: z.number().nullable(),
+});
+export type AnomalyItem = z.infer<typeof anomalyItem>;
+
+export const anomaliesResponse = z.object({ items: z.array(anomalyItem) });
+export type AnomaliesResponse = z.infer<typeof anomaliesResponse>;
+
+export const resolveAnomalyBody = z.object({
+  action: z.enum(["resolve", "dismiss", "freeze", "ban"]),
+  days: z.number().int().min(1).max(365).optional(),
+  reason: z.string().max(500).optional(),
+});
+
+export const auditItem = z.object({
+  id: z.number().int(),
+  actor: z.string().nullable(),
+  action: z.string(),
+  target_type: z.string().nullable(),
+  target_id: z.string().nullable(),
+  detail: z.string().nullable(),
+  ip: z.string().nullable(),
+  created_at: z.number(),
+});
+export type AuditItem = z.infer<typeof auditItem>;
+
+export const auditResponse = z.object({ items: z.array(auditItem) });
+export type AuditResponse = z.infer<typeof auditResponse>;
+
+export const createReportBody = z.object({
+  target_type: z.enum(["torrent", "user"]),
+  target_id: z.string().min(1).max(64),
+  reason: z.string().min(2).max(64),
+  detail: z.string().max(1000).optional(),
+});
+
+/* ============================ 申诉 ============================ */
+
+export const appealMessage = z.object({
+  author: z.string().nullable(),
+  body: z.string(),
+  created_at: z.number(),
+});
+
+export const appealItem = z.object({
+  id: z.number().int(),
+  user: z.object({ name: z.string() }),
+  kind: z.string(),
+  target_id: z.string().nullable(),
+  reason: z.string(),
+  status: z.string(),
+  created_at: z.number(),
+  resolved_at: z.number().nullable(),
+  resolution_note: z.string().nullable(),
+  messages: z.array(appealMessage),
+});
+export type AppealItem = z.infer<typeof appealItem>;
+
+export const appealsResponse = z.object({ items: z.array(appealItem) });
+export type AppealsResponse = z.infer<typeof appealsResponse>;
+
+export const createAppealBody = z.object({
+  kind: z.enum(["bonus_freeze", "other"]),
+  reason: z.string().min(10).max(2000),
+});
+export type CreateAppealBody = z.infer<typeof createAppealBody>;
+
+export const publicAppealBody = z.object({
+  username: z.string().min(1).max(64),
+  email: z.string().email().max(190),
+  password: z.string().min(1).max(200),
+  reason: z.string().min(10).max(2000),
+});
+export type PublicAppealBody = z.infer<typeof publicAppealBody>;
+
+export const appealMessageBody = z.object({ body: z.string().min(1).max(2000) });
+
+export const appealResolveBody = z.object({
+  action: z.enum(["accept", "reject"]),
+  note: z.string().max(1000).optional(),
+});

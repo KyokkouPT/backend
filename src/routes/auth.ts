@@ -24,6 +24,7 @@ import {
   sha256,
 } from "../auth/session.js";
 import { HttpProblem, badRequest, conflict } from "../lib/problem.js";
+import { verifyTotp } from "../lib/totp.js";
 import { createNotification, unreadNotificationCount } from "../lib/notifications.js";
 import { loadSettings } from "../lib/settings.js";
 import { numberCount, toUserSummary } from "../lib/serialize.js";
@@ -77,6 +78,35 @@ export function authRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginAs
 
         if (!user || !valid || user.status !== "active") {
           throw new HttpProblem(401, "invalid_credentials", "用户名或密码不正确");
+        }
+
+        // 已启用 2FA：必须提供 TOTP 或一次性恢复码。
+        if (Number(user.twofa_enabled ?? 0) === 1) {
+          const totp = body.totp_code?.replace(/\s+/g, "") ?? "";
+          const recovery = body.recovery_code?.trim().toUpperCase() ?? "";
+          let verified = false;
+
+          if (totp.length > 0 && user.twofa_secret && verifyTotp(user.twofa_secret, totp)) {
+            verified = true;
+          } else if (recovery.length > 0) {
+            const row = await db
+              .selectFrom("twofa_recovery_codes")
+              .select("id")
+              .where("user_id", "=", user.id)
+              .where("code_hash", "=", sha256(recovery))
+              .where("used_at", "is", null)
+              .executeTakeFirst();
+            if (row) {
+              await db
+                .updateTable("twofa_recovery_codes")
+                .set({ used_at: Date.now() })
+                .where("id", "=", row.id)
+                .execute();
+              verified = true;
+            }
+          }
+
+          if (!verified) throw new HttpProblem(401, "twofa_required", "需要两步验证码");
         }
 
         const session = await createSession(db, Number(user.id), {

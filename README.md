@@ -8,7 +8,7 @@
 - 端口：`31001`
 - 校验：zod 3
 
-> 当前进度：Phase 4 纵切（社区：邀请注册 + 求种 + 排行榜 + 用户主页）。健康检查、配置、三库连接、迁移（001–005）、seed、认证/CSRF、site/bootstrap/home/rules/me、目录/上传/下载、Staff 审核与通知、announce/scrape、H&R、魔力值与兑换、RSS/downhash、邀请码注册、求种悬赏、排行榜、公开用户主页已实现；2FA、账号设置、Staff 举报/反作弊/审计/申诉与 SMTP 在下一轮加入。
+> 当前进度：Phase 5 纵切（2FA + 账号设置 + Staff 举报/反作弊/审计/申诉）。健康检查、配置、三库连接、迁移（001–007）、seed、认证/CSRF、site/bootstrap/home/rules/me、目录/上传/下载、审核与通知、announce/scrape、H&R、魔力值/兑换、RSS/downhash、邀请注册、求种悬赏、排行/主页、TOTP 2FA、设置与偏好、举报/反作弊/审计/申诉已实现；站点设置/分区编辑、SMTP 实际发送与部署验证在安全加固轮完成。
 
 ## 目录
 
@@ -21,15 +21,15 @@ backend/
 │   ├── auth/               # scrypt、session、CSRF、权限
 │   ├── db/
 │   │   ├── db.ts           # Kysely + better-sqlite3 / mysql2 / pg
-│   │   ├── types.ts        # Database 类型（迁移 001–005）
+│   │   ├── types.ts        # Database 类型（迁移 001–007）
 │   │   ├── migrate.ts      # 有序迁移执行器
-│   │   ├── migrations/     # 001_init · 002_notifications · 003_tracker · 004_economy · 005_community
+│   │   ├── migrations/     # 001_init · 002_notifications · 003_tracker · 004_economy · 005_community · 006_twofa · 007_moderation
 │   │   ├── seed.ts         # 幂等 seed
 │   │   └── check.ts        # 库检查
-│   ├── lib/                # bencode/.torrent、查询、通知、H&R、魔力、downhash、problem+json
+│   ├── lib/                # bencode/.torrent、查询、通知、H&R、魔力、downhash、TOTP、申诉、problem+json
 │   ├── tracker/            # 原始 query 解析、内存 peer 注册表、announce 持久化
-│   └── routes/             # health / auth / site / me / torrents / staff / notifications / tracker / economy / invites / requests / top / users
-├── test/                   # vitest（57 条）
+│   └── routes/             # health / auth / site / me / torrents / staff / notifications / tracker / economy / invites / requests / top / users / settings / staff-admin / appeals / reports
+├── test/                   # vitest（67 条）
 ├── vendor/contracts/       # 共享 DTO/zod（复制维护）
 ├── vendor/config/          # 站点设置 schema 与默认值
 ├── data/                   # 运行时 SQLite（git 忽略）
@@ -127,6 +127,20 @@ seed 开发账号（密码由 `SEED_PASSWORD` 控制，默认 `kyokkou-dev`）�
 | POST | `/api/v1/requests/:id/cancel`、`/fulfill` | 取消退款 / Staff 结算 |
 | GET | `/api/v1/top` | 用户与种子榜单 |
 | GET | `/api/v1/users/:name` | 公开用户主页（尊重隐私偏好） |
+| GET/PUT | `/api/v1/me/settings` | 账号设置；改密码会撤销全部 session |
+| GET/PUT | `/api/v1/me/preferences` | 通知/隐私偏好 |
+| POST | `/api/v1/me/passkey/rotate` | 轮换 passkey（旧 Tracker/RSS 地址立即失效） |
+| POST | `/api/v1/me/2fa/setup`、`/enable`、`/disable`、`/recovery-codes` | TOTP 2FA 生命周期 |
+| POST | `/api/v1/reports` | 举报种子/用户 |
+| GET | `/api/v1/staff/summary` | 站务概览计数 + schema 版本 |
+| GET | `/api/v1/staff/users?q=` | 用户搜索 |
+| POST | `/api/v1/staff/users/:id/warn\|suspend\|ban\|restore` | 用户处置（停用/封禁撤销 session） |
+| GET/POST | `/api/v1/staff/reports`、`/:id/resolve` | 举报队列与处理 |
+| GET/POST | `/api/v1/staff/anomalies`、`/:id/resolve` | 反作弊队列；freeze/ban |
+| GET | `/api/v1/staff/audit`、`/staff/audit/export` | 审计列表与 CSV |
+| GET/POST | `/api/v1/staff/appeals`、`/:id/resolve` | 申诉队列与处理 |
+| GET/POST | `/api/v1/me/appeals`、`/:id/messages`、`/withdraw` | 用户申诉 |
+| POST | `/api/v1/appeals/public` | 免登录封禁申诉（校验邮箱+密码） |
 
 错误统一为 `application/problem+json`（`type/title/status/code/request_id/fields`）。
 
@@ -181,4 +195,4 @@ pnpm 11 只从 `pnpm-workspace.yaml` 读取 build scripts 严格度设置。本�
 
 ## 路线
 
-Phase 1 → 目录与上传审核 → Tracker/H&R/经济 → 社区（当前）→ 2FA/设置/Staff → 安全加固。验收标准见仓库外 `docs/16`–`docs/20`。
+Phase 1 → 目录与上传审核 → Tracker/H&R/经济 → 社区 → 2FA/设置/Staff（当前）→ 安全加固与部署验证。验收标准见仓库外 `docs/16`–`docs/20`。

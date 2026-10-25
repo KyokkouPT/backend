@@ -63,7 +63,7 @@ function toSiteIdentity(settings: Settings, version: string): SiteIdentity {
  * 导航由后端按“已实现页面”生成，避免前端出现死链。
  * 图标是字符串 key，前端映射到 lucide 组件。
  */
-function buildNav(options: { loggedIn: boolean; canReview: boolean }): SiteNav {
+function buildNav(options: { loggedIn: boolean; staffPermissions: string[] }): SiteNav {
   const groups: NavGroup[] = [
     {
       items: [
@@ -92,10 +92,16 @@ function buildNav(options: { loggedIn: boolean; canReview: boolean }): SiteNav {
   }
 
   const staff: NavGroup[] = [];
-  if (options.canReview) {
+  if (options.staffPermissions.length > 0) {
     staff.push({
       items: [
+        { key: "staff", href: "/staff", label: "概览", icon: "gauge", exact: true },
         { key: "staff-review", href: "/staff/review", label: "审核台", icon: "clipboard-check" },
+        { key: "staff-reports", href: "/staff/reports", label: "举报", icon: "alert-triangle" },
+        { key: "staff-users", href: "/staff/users", label: "用户管理", icon: "user-cog" },
+        { key: "staff-anomalies", href: "/staff/anomalies", label: "反作弊", icon: "shield-alert" },
+        { key: "staff-audit", href: "/staff/audit", label: "审计日志", icon: "scroll-text" },
+        { key: "staff-appeals", href: "/staff/appeals", label: "申诉", icon: "clipboard-check" },
       ],
     });
   }
@@ -155,18 +161,29 @@ async function loadSections(db: Db): Promise<Section[]> {
 }
 
 async function loadCounts(db: Db, userId: number | null): Promise<BootstrapCounts> {
-  const pending = await db
-    .selectFrom("torrents")
-    .select((eb) => eb.fn.countAll<number>().as("count"))
-    .where("status", "=", "pending")
-    .where("deleted_at", "is", null)
-    .executeTakeFirst();
+  const [pending, openReports, anomalies] = await Promise.all([
+    db
+      .selectFrom("torrents")
+      .select((eb) => eb.fn.countAll<number>().as("count"))
+      .where("status", "=", "pending")
+      .where("deleted_at", "is", null)
+      .executeTakeFirst(),
+    db
+      .selectFrom("reports")
+      .select((eb) => eb.fn.countAll<number>().as("count"))
+      .where("status", "=", "open")
+      .executeTakeFirst(),
+    db
+      .selectFrom("anomalies")
+      .select((eb) => eb.fn.countAll<number>().as("count"))
+      .where("status", "=", "open")
+      .executeTakeFirst(),
+  ]);
 
   return {
     pending_review: numberCount(pending),
-    // reports / anomalies 表在后续纵切创建
-    open_reports: 0,
-    anomalies: 0,
+    open_reports: numberCount(openReports),
+    anomalies: numberCount(anomalies),
     unread: userId === null ? 0 : await unreadNotificationCount(db, userId),
   };
 }
@@ -367,7 +384,7 @@ export function siteRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginAs
         site: toSiteIdentity(settings, APP_VERSION),
         nav: buildNav({
           loggedIn: Boolean(auth),
-          canReview: permissions.includes(PERMISSIONS.staffReview),
+          staffPermissions: permissions,
         }),
         sections,
         permissions,

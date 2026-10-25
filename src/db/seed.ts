@@ -945,6 +945,102 @@ export async function seedDatabase(db: Db, options: { password: string }): Promi
     });
   }
 
+  // 审核 / 申诉演示数据
+  const axueSeedId = userIds.get("阿雪");
+  const lightSeedId = userIds.get("lightbringer");
+  const duneSeedId = torrentIds.get("1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b");
+
+  if (axueSeedId !== undefined && duneSeedId !== undefined) {
+    const existing = await db
+      .selectFrom("reports")
+      .select("id")
+      .where("target_type", "=", "torrent")
+      .where("target_id", "=", String(duneSeedId))
+      .where("reason", "=", "quality")
+      .executeTakeFirst();
+    if (!existing) {
+      await db
+        .insertInto("reports")
+        .values({
+          reporter_id: axueSeedId,
+          target_type: "torrent",
+          target_id: String(duneSeedId),
+          target_label: "Dune.Part.Two.2024.2160p.UHD.BluRay.x265-KyokkouRaws",
+          reason: "quality",
+          detail: "音轨与页面标注不一致。",
+          status: "open",
+          resolved_by: null,
+          resolved_at: null,
+          created_at: now - 6 * HOUR,
+        })
+        .execute();
+    }
+  }
+
+  if (lightSeedId !== undefined) {
+    const existing = await db
+      .selectFrom("anomalies")
+      .select("id")
+      .where("user_id", "=", lightSeedId)
+      .where("kind", "=", "ratio_anomaly")
+      .executeTakeFirst();
+    if (!existing) {
+      await db
+        .insertInto("anomalies")
+        .values({
+          user_id: lightSeedId,
+          kind: "ratio_anomaly",
+          severity: "medium",
+          status: "open",
+          detail_json: JSON.stringify({ note: "短时间上传量异常增长" }),
+          resolved_by: null,
+          resolved_at: null,
+          created_at: now - 3 * HOUR,
+        })
+        .execute();
+    }
+  }
+
+  if (axueSeedId !== undefined) {
+    const existing = await db
+      .selectFrom("appeals")
+      .select("id")
+      .where("user_id", "=", axueSeedId)
+      .where("kind", "=", "bonus_freeze")
+      .executeTakeFirst();
+    if (!existing) {
+      await db
+        .insertInto("appeals")
+        .values({
+          user_id: axueSeedId,
+          kind: "bonus_freeze",
+          target_id: null,
+          reason: "冻结期间无法兑换，请复核。",
+          status: "open",
+          resolved_by: null,
+          resolved_at: null,
+          resolution_note: null,
+          created_at: now - 2 * HOUR,
+        })
+        .execute();
+      const appeal = await db
+        .selectFrom("appeals")
+        .select("id")
+        .where("user_id", "=", axueSeedId)
+        .where("kind", "=", "bonus_freeze")
+        .executeTakeFirstOrThrow();
+      await db
+        .insertInto("appeal_messages")
+        .values({
+          appeal_id: Number(appeal.id),
+          author_id: axueSeedId,
+          body: "补充：冻结前没有任何异常下载。",
+          created_at: now - 1 * HOUR,
+        })
+        .execute();
+    }
+  }
+
   // 实例元数据
   const meta = await db.selectFrom("instance_meta").selectAll().executeTakeFirst();
   let instanceId: string;

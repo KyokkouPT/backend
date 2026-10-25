@@ -61,6 +61,8 @@ export interface UsersTable {
   last_seen_at: number | null;
   bonus_frozen_until: number | null;
   last_bonus_at: number | null;
+  twofa_secret: string | null;
+  twofa_enabled: number | null;
 }
 
 export interface SessionsTable {
@@ -280,6 +282,61 @@ export interface NotificationsTable {
   created_at: number;
 }
 
+export interface TwofaRecoveryCodesTable {
+  id: Generated<number>;
+  user_id: number;
+  code_hash: string;
+  used_at: number | null;
+  created_at: number;
+}
+
+export interface ReportsTable {
+  id: Generated<number>;
+  reporter_id: number;
+  target_type: string;
+  target_id: string;
+  target_label: string;
+  reason: string;
+  detail: string | null;
+  status: string;
+  resolved_by: number | null;
+  resolved_at: number | null;
+  created_at: number;
+}
+
+export interface AnomaliesTable {
+  id: Generated<number>;
+  user_id: number;
+  kind: string;
+  severity: string;
+  status: string;
+  detail_json: string | null;
+  resolved_by: number | null;
+  resolved_at: number | null;
+  created_at: number;
+}
+
+export interface AppealsTable {
+  id: Generated<number>;
+  user_id: number;
+  kind: string;
+  target_id: string | null;
+  reason: string;
+  status: string;
+  resolved_by: number | null;
+  resolved_at: number | null;
+  resolution_note: string | null;
+  created_at: number;
+}
+
+export interface AppealMessagesTable {
+  id: Generated<number>;
+  appeal_id: number;
+  author_id: number;
+  body: string;
+  created_at: number;
+}
+
 export interface Database {
   instance_meta: InstanceMetaTable;
   schema_migrations: SchemaMigrationsTable;
@@ -306,4 +363,9 @@ export interface Database {
   invites: InvitesTable;
   requests: RequestsTable;
   user_preferences: UserPreferencesTable;
+  twofa_recovery_codes: TwofaRecoveryCodesTable;
+  reports: ReportsTable;
+  anomalies: AnomaliesTable;
+  appeals: AppealsTable;
+  appeal_messages: AppealMessagesTable;
 }
