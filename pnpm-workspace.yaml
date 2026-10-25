@@ -1,0 +1,8 @@
+allowBuilds:
+  better-sqlite3: set this to true or false
+  esbuild: set this to true or false
+# 仅 pnpm 设置，不构成工作区：没有 packages/catalog，不跨仓库共享依赖。
+# pnpm 11 只从这里读取 build scripts 的严格度；不设置时，未批准脚本会让
+# `pnpm install` 以退出码 1 结束，并连带阻断后续 `pnpm test/build`。
+# 本项目使用 better-sqlite3 自带的 prebuilt 二进制，无需运行 node-gyp。
+strictDepBuilds: false
