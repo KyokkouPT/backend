@@ -8,23 +8,31 @@
 - 端口：`31001`
 - 校验：zod 3
 
-> 当前处于 Phase 0：应用骨架 + 健康检查。数据库、迁移、seed、认证与业务接口按纵切逐步加入。
+> 当前进度：Phase 1 纵切（bootstrap + auth + shell）。健康检查、配置、三库连接、迁移、seed、认证/CSRF、site/bootstrap/home/rules/me 已实现；目录、上传、Tracker、经济、社区、Staff 按后续纵切加入。
 
 ## 目录
 
 ```text
 backend/
 ├── src/
-│   ├── app.ts            # Fastify 组装（测试入口）
-│   ├── server.ts         # 启动 / 优雅退出
-│   ├── config.ts         # 环境变量 zod 校验
-│   ├── version.ts        # 版本号
-│   └── routes/health.ts  # GET /api/v1/health
-├── test/                 # vitest
-├── vendor/contracts/     # 共享 DTO/zod 契约（复制维护）
-├── vendor/config/        # 站点设置 schema 与默认值（仅后端）
-├── pnpm-workspace.yaml   # 仅 pnpm 设置，不是工作区（见下）
-└── data/                 # 运行时 SQLite 文件（git 忽略）
+│   ├── app.ts              # Fastify 组装（插件、错误处理、路由）
+│   ├── server.ts           # 启动、自动迁移、优雅退出
+│   ├── config.ts           # 环境变量 zod 校验（生产强制 secret）
+│   ├── auth/               # scrypt、session、CSRF、权限
+│   ├── db/
+│   │   ├── db.ts           # Kysely + better-sqlite3 / mysql2 / pg
+│   │   ├── types.ts        # Database 类型（迁移 001 范围）
+│   │   ├── migrate.ts      # 有序迁移执行器
+│   │   ├── migrations/     # 001_init
+│   │   ├── seed.ts         # 幂等 seed
+│   │   └── check.ts        # 库检查
+│   ├── lib/                # problem+json、设置、序列化、校验
+│   └── routes/             # health / auth / site / me
+├── test/                   # vitest（20 条）
+├── vendor/contracts/       # 共享 DTO/zod（复制维护）
+├── vendor/config/          # 站点设置 schema 与默认值
+├── data/                   # 运行时 SQLite（git 忽略）
+└── pnpm-workspace.yaml     # 仅 pnpm 设置，不是工作区
 ```
 
 ## 启动
@@ -32,9 +40,19 @@ backend/
 ```bash
 pnpm install
 cp .env.example .env        # Windows: Copy-Item .env.example .env
+pnpm migrate                # 建表（server 启动时也会自动跑一次）
+pnpm seed                   # 开发数据（可重复执行）
 pnpm dev                    # http://127.0.0.1:31001
 curl http://127.0.0.1:31001/api/v1/health
 ```
+
+seed 开发账号（密码由 `SEED_PASSWORD` 控制，默认 `kyokkou-dev`）：
+
+| 用户名 | 角色 | 说明 |
+| --- | --- | --- |
+| `lightbringer` | admin | 主测试账号 |
+| `root` | admin | 站务/公告作者 |
+| `阿雪` | user | 普通用户 |
 
 ## 命令
 
@@ -44,18 +62,57 @@ curl http://127.0.0.1:31001/api/v1/health
 | `pnpm build` | `tsc -p tsconfig.build.json` 输出到 `dist/` |
 | `pnpm start` | 用 tsx 加载器运行 `dist/server.js`（原因见下） |
 | `pnpm typecheck` | `tsc --noEmit` |
-| `pnpm test` | vitest |
+| `pnpm test` | vitest（认证、CSRF、bootstrap、home、rules、me、迁移/seed 幂等、密码哈希） |
+| `pnpm migrate` | 执行未应用的迁移 |
+| `pnpm seed` | 幂等 seed |
+| `pnpm db:check` | 打印驱动、schema 版本与各表行数 |
 
 ## 环境变量
 
 | 变量 | 默认 | 说明 |
 | --- | --- | --- |
-| `NODE_ENV` | `development` | development / test / production |
-| `HOST` | `127.0.0.1` | 只监听本机；生产由 Nginx 反代 |
-| `PORT` | `31001` | |
+| `NODE_ENV` | `development` | production 下强制校验 secret |
+| `HOST` / `PORT` | `127.0.0.1` / `31001` | 只监听本机，生产由 Nginx 反代 |
 | `LOG_LEVEL` | `info` | fatal…trace |
+| `DATABASE_DRIVER` | `sqlite` | sqlite / mysql / mariadb / postgres |
+| `DATABASE_URL` | `file:./data/kyokkou.db` | mysql:// 或 postgres:// |
+| `KYOKKOU_BASE_URL` | `http://localhost:31002` | 公开前端地址（announce/download/RSS 链接）；不要用 `BASE_URL` |
+| `SESSION_SECRET` | 开发默认值 | 32+ 字节；生产未替换会拒绝启动 |
+| `SEED_PASSWORD` | `kyokkou-dev` | seed 账号密码；生产未替换会拒绝启动 |
 
-后续纵切追加：`DATABASE_DRIVER`、`DATABASE_URL`、`KYOKKOU_BASE_URL`、`SESSION_SECRET`、`SEED_PASSWORD`、`SMTP_*`。**不要使用 `BASE_URL`**（会与构建工具注入的变量冲突）。
+## 数据库与迁移
+
+- 迁移在 `src/db/migrations/NNN_name.ts`，按 `version` 顺序执行，记录在 `schema_migrations`。
+- SQLite / PostgreSQL 的迁移在一个事务里；MySQL/MariaDB 的 DDL 非事务，失败会明确抛错，重试前需人工检查。
+- 主键按方言生成：SQLite `integer primary key autoincrement`、MySQL `bigint auto_increment`、PostgreSQL `bigserial`。
+- 计数/时间戳是 bigint 列，应用层统一 number（写入 < 2^53）；PostgreSQL 的 int8 在 `db.ts` 里解析为 number。
+- 换库：改 `DATABASE_DRIVER`/`DATABASE_URL` 后执行 `pnpm migrate && pnpm seed`。SQLite 是默认路径；改动 SQL 时需同时验证 MySQL 8.4 / PostgreSQL 16。
+
+## 已实现 API
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/api/v1/health` | 探活 |
+| GET | `/api/v1/site` | 站点身份/注册/页脚/主题/模块 |
+| GET | `/api/v1/bootstrap` | site/nav/sections/permissions/counts/me |
+| GET | `/api/v1/home` | 统计、最新发布、公告、促销 |
+| GET | `/api/v1/rules` | 注册/审核/Tracker/H&R/分区规范 |
+| GET | `/api/v1/auth/csrf` | 发放/轮换 CSRF（已登录时同步 session） |
+| POST | `/api/v1/auth/login` | `{username,password}`，需 CSRF |
+| POST | `/api/v1/auth/logout` | 需 session + CSRF |
+| GET | `/api/v1/auth/me` | 当前用户/权限/待办 |
+| GET | `/api/v1/me` | 用户/统计/H&R/snatches |
+
+错误统一为 `application/problem+json`（`type/title/status/code/request_id/fields`）。
+
+## 认证与安全
+
+- 密码：`node:crypto` scrypt，存储 `scrypt$1$N$r$p$salt$hash`。
+- Session：`kp_session` HttpOnly、SameSite=Lax、生产 Secure；数据库存 token 的 SHA-256。
+- CSRF：`kp_csrf` 非 HttpOnly Cookie + `X-CSRF-Token` header；已登录时与 `sessions.csrf_hash` 绑定。
+- 登录失败统一返回 `invalid_credentials`，不泄露账号是否存在；用户不存在也跑一次等价 KDF。
+- 停用/封禁用户：`status` 非 active 时拒绝登录，并在解析 session 时清除旧会话。
+- 全局 rate limit 600/min，登录 20/min；helmet 已启用。
 
 ## 本地无 `X-Kyou-Secret`
 
@@ -64,9 +121,9 @@ curl http://127.0.0.1:31001/api/v1/health
 ## vendor 契约同步
 
 - `vendor/contracts` 与 `frontend/vendor/contracts` **内容必须一致**。
-- 改 DTO：先改本仓库契约，复制到 `../frontend/vendor/contracts`，两边各自 `pnpm typecheck` 后再分别提交。
-- 每次改动在 commit body 记录契约版本变化；当前 `@kyokkou/contracts@0.1.0`。
-- 依赖用 `file:vendor/...`，禁止 `workspace:*`。
+- 改 DTO：先改本仓库契约，复制到 `../frontend/vendor/contracts`，两边各自 `pnpm install && pnpm typecheck` 后再分别提交。
+- `file:` 目录依赖是复制（不是链接），**改完契约必须重新 `pnpm install`** 才会进入 `node_modules`。
+- 依赖用 `file:vendor/...`，禁止 `workspace:*`。当前 `@kyokkou/contracts@0.1.0`（含 bootstrap/auth/torrent DTO）。
 
 ## 关于 `pnpm-workspace.yaml`
 
@@ -74,11 +131,10 @@ pnpm 11 只从 `pnpm-workspace.yaml` 读取 build scripts 严格度设置。本�
 
 ## 为什么 `start` 用 tsx 加载器
 
-`@kyokkou/contracts` 以 `file:vendor/contracts` 引入，包里是 TypeScript 源码。`tsc` 只编译 `src/`，运行 `dist/server.js` 时 Node 会去 `node_modules/.pnpm/.../node_modules/@kyokkou/contracts/index.ts` 加载契约；Node 24 的原生 type stripping 明确拒绝 `node_modules` 下的 `.ts`（`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`），已实测。因此 `start` 使用 `node --import tsx dist/server.js`：tsx 负责转译契约 TS，业务代码仍是 `tsc` 的构建产物。
+`@kyokkou/contracts` 以 `file:vendor/contracts` 引入，包里是 TypeScript 源码。`tsc` 只编译 `src/`，运行 `dist/server.js` 时 Node 会去 `node_modules/.pnpm/.../node_modules/@kyokkou/contracts/index.ts` 加载契约；Node 24 的原生 type stripping 拒绝 `node_modules` 下的 `.ts`（`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING`），已实测。因此 `start` 使用 `node --import tsx dist/server.js`：tsx 负责转译契约 TS，业务代码仍是 `tsc` 的构建产物。
 
-这条路径只影响运行时加载，不改变契约结构；`dev` 本来就用 tsx。若未来把契约改成“构建出 JS + d.ts”的发布形态，可以移除这个加载器。
-
+若未来把契约改成“构建出 JS + d.ts”的发布形态，可以移除这个加载器。
 
 ## 路线
 
-Phase 0（当前）→ 健康检查、配置、契约 → Phase 1 数据库/迁移/seed/认证/bootstrap → 目录与上传审核 → Tracker/H&R/经济 → 社区/Staff → 安全加固。验收标准见仓库外 `docs/16`–`docs/20`。
+Phase 1（当前）→ 目录与上传审核 → Tracker/H&R/经济 → 社区/Staff → 安全加固。验收标准见仓库外 `docs/16`–`docs/20`。

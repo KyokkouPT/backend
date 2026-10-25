@@ -12,7 +12,10 @@
     "build": "tsc -p tsconfig.build.json",
     "start": "node --env-file-if-exists=.env --import tsx dist/server.js",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "migrate": "node --env-file-if-exists=.env --import tsx src/db/migrate-cli.ts",
+    "seed": "node --env-file-if-exists=.env --import tsx src/db/seed-cli.ts",
+    "db:check": "node --env-file-if-exists=.env --import tsx src/db/check.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.3",

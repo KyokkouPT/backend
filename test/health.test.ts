@@ -1,16 +1,21 @@
-import { afterAll, describe, expect, it } from "vitest";
-import { buildApp } from "../src/app.js";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { API_PREFIX } from "@kyokkou/contracts";
+import { createTestContext, type TestContext } from "./helpers.js";
 
-const app = buildApp();
+let ctx: TestContext;
+
+beforeAll(async () => {
+  ctx = await createTestContext();
+});
 
 afterAll(async () => {
-  await app.close();
+  await ctx.app.close();
+  await ctx.db.destroy();
 });
 
 describe("GET /api/v1/health", () => {
   it("returns the contract payload", async () => {
-    const res = await app.inject({ method: "GET", url: `${API_PREFIX}/health` });
+    const res = await ctx.app.inject({ method: "GET", url: `${API_PREFIX}/health` });
 
     expect(res.statusCode).toBe(200);
     expect(res.headers["content-type"]).toContain("application/json");

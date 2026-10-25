@@ -63,3 +63,294 @@ export type Page<T> = {
   items: T[];
   next_cursor: string | null;
 };
+
+/* ============================ 站点 / 导航 ============================ */
+
+export const siteTheme = z.object({
+  default: z.enum(["polar", "aurora"]),
+});
+
+export const siteFooter = z.object({
+  copyright: z.string(),
+  icp: z.string().nullable(),
+  disclaimer: z.string(),
+  status: z.string(),
+});
+
+export const siteRegistration = z.object({
+  open: z.boolean(),
+  invite_registration_enabled: z.boolean(),
+  closed_message: z.string(),
+});
+export type SiteRegistration = z.infer<typeof siteRegistration>;
+
+export const siteIdentity = z.object({
+  name: z.string(),
+  tagline: z.string(),
+  locale: z.string(),
+  version: z.string(),
+  theme: siteTheme,
+  modules: z.record(z.boolean()),
+  registration: siteRegistration,
+  footer: siteFooter,
+});
+export type SiteIdentity = z.infer<typeof siteIdentity>;
+
+/** 导航项：图标由前端按 key 映射到 lucide，不在契约里放组件。 */
+export const navItem = z.object({
+  key: z.string(),
+  href: z.string(),
+  label: z.string(),
+  icon: z.string(),
+  exact: z.boolean().optional(),
+  badge: z.string().nullable().optional(),
+});
+export type NavItem = z.infer<typeof navItem>;
+
+export const navGroup = z.object({
+  label: z.string().optional(),
+  items: z.array(navItem),
+});
+export type NavGroup = z.infer<typeof navGroup>;
+
+export const siteNav = z.object({
+  site: z.array(navGroup),
+  staff: z.array(navGroup),
+});
+export type SiteNav = z.infer<typeof siteNav>;
+
+/* ============================ 分区 / 字段 ============================ */
+
+export const sectionFieldType = z.enum(["text", "select", "multiselect", "number"]);
+export type SectionFieldType = z.infer<typeof sectionFieldType>;
+
+export const sectionField = z.object({
+  key: z.string().regex(/^[a-z][a-z0-9_]{0,31}$/),
+  label: z.string(),
+  type: sectionFieldType,
+  options: z.array(z.string()).optional(),
+  required: z.boolean(),
+  filterable: z.boolean(),
+  display_order: z.number().int(),
+  hint: z.string().optional(),
+});
+export type SectionField = z.infer<typeof sectionField>;
+
+export const category = z.object({
+  id: z.number().int(),
+  slug: z.string(),
+  name: z.string(),
+});
+export type CategoryRef = z.infer<typeof category>;
+
+export const section = z.object({
+  slug: z.string(),
+  name: z.string(),
+  display_order: z.number().int(),
+  review_mode: z.string(),
+  charter: z.record(z.string()).optional(),
+  fields: z.array(sectionField),
+  categories: z.array(category),
+});
+export type Section = z.infer<typeof section>;
+
+/* ============================ 用户 ============================ */
+
+export const userSummary = z.object({
+  id: z.number().int(),
+  username: z.string(),
+  role: role,
+  class_key: z.string(),
+  status: userStatus,
+  uploaded: z.number(),
+  downloaded: z.number(),
+  bonus: z.number(),
+  /** downloaded 为 0 时无法计算分享率，返回 null（前端展示 ∞ / —）。 */
+  ratio: z.number().nullable(),
+  seedtime: z.number(),
+  created_at: z.number(),
+});
+export type UserSummary = z.infer<typeof userSummary>;
+
+export const bootstrapCounts = z.object({
+  pending_review: z.number().int(),
+  open_reports: z.number().int(),
+  anomalies: z.number().int(),
+  unread: z.number().int(),
+});
+export type BootstrapCounts = z.infer<typeof bootstrapCounts>;
+
+export const bootstrap = z.object({
+  site: siteIdentity,
+  nav: siteNav,
+  sections: z.array(section),
+  permissions: z.array(z.string()),
+  counts: bootstrapCounts,
+  me: userSummary.nullable(),
+  config_version: z.string(),
+});
+export type Bootstrap = z.infer<typeof bootstrap>;
+
+/* ============================ 种子 / 首页 ============================ */
+
+export const promo = z.enum(["free", "2x", "50", "30", "none"]);
+export type Promo = z.infer<typeof promo>;
+
+export const torrentSectionRef = z.object({ slug: z.string(), name: z.string() });
+export const torrentCategoryRef = z.object({ slug: z.string(), name: z.string() });
+export const torrentUploader = z.object({
+  id: z.number().int(),
+  name: z.string(),
+  hue: z.number().int(),
+});
+
+export const torrentSummary = z.object({
+  id: z.number().int(),
+  name: z.string(),
+  section: torrentSectionRef,
+  category: torrentCategoryRef,
+  uploader: torrentUploader.nullable(),
+  size: z.number(),
+  files_count: z.number().int(),
+  promo,
+  seeders: z.number().int(),
+  leechers: z.number().int(),
+  completed: z.number().int(),
+  created_at: z.number(),
+  tags: z.array(z.string()),
+  meta: z.record(z.union([z.string(), z.number(), z.boolean()])),
+  owned: z.boolean(),
+  download_url: z.string(),
+});
+export type TorrentSummary = z.infer<typeof torrentSummary>;
+
+export const announcement = z.object({
+  id: z.number().int(),
+  title: z.string(),
+  body: z.string(),
+  author: z.string().nullable(),
+  pinned: z.boolean(),
+  tone: z.enum(["info", "warn"]),
+  created_at: z.number(),
+});
+export type Announcement = z.infer<typeof announcement>;
+
+export const promoEvent = z.object({
+  id: z.number().int(),
+  name: z.string(),
+  scope: z.string(),
+  promo: z.string(),
+  starts_at: z.number().nullable(),
+  ends_at: z.number().nullable(),
+});
+export type PromoEvent = z.infer<typeof promoEvent>;
+
+export const homeStats = z.object({
+  users: z.number().int(),
+  torrents: z.number().int(),
+  seeders: z.number().int(),
+  leechers: z.number().int(),
+  peers: z.number().int(),
+  new_today: z.number().int(),
+});
+export type HomeStats = z.infer<typeof homeStats>;
+
+export const homeResponse = z.object({
+  stats: homeStats,
+  latest: z.array(torrentSummary),
+  announcements: z.array(announcement),
+  promos: z.array(promoEvent),
+  my: z
+    .object({
+      unread: z.number().int(),
+      hnr_due: z.number().int(),
+    })
+    .nullable(),
+});
+export type HomeResponse = z.infer<typeof homeResponse>;
+
+/* ============================ 认证 / 我的 / 规则 ============================ */
+
+export const csrfResponse = z.object({ csrf_token: z.string() });
+export type CsrfResponse = z.infer<typeof csrfResponse>;
+
+export const loginRequest = z.object({
+  username: z.string().min(1).max(190),
+  password: z.string().min(1).max(200),
+  totp_code: z.string().max(16).optional(),
+  recovery_code: z.string().max(64).optional(),
+});
+export type LoginRequest = z.infer<typeof loginRequest>;
+
+export const loginResponse = z.object({
+  user: userSummary,
+  csrf_token: z.string(),
+});
+export type LoginResponse = z.infer<typeof loginResponse>;
+
+export const authMeResponse = z.object({
+  user: userSummary,
+  permissions: z.array(z.string()),
+  unread_count: z.number().int(),
+  todo: z.object({ pending_review: z.number().int() }),
+});
+export type AuthMeResponse = z.infer<typeof authMeResponse>;
+
+export const hnrItem = z.object({
+  id: z.number().int(),
+  torrent_id: z.number().int(),
+  name: z.string(),
+  deadline_at: z.number(),
+  required_seconds: z.number().int(),
+  seeded_seconds: z.number().int(),
+  status: z.string(),
+});
+
+export const snatchItem = z.object({
+  torrent_id: z.number().int(),
+  name: z.string(),
+  uploaded: z.number(),
+  downloaded: z.number(),
+  seedtime: z.number(),
+  last_announce_at: z.number().nullable(),
+});
+
+export const meResponse = z.object({
+  user: userSummary,
+  stats: z.object({
+    seeding: z.number().int(),
+    leeching: z.number().int(),
+    published: z.number().int(),
+  }),
+  hnr: z.array(hnrItem),
+  snatches: z.array(snatchItem),
+});
+export type MeResponse = z.infer<typeof meResponse>;
+
+export const rulesSection = z.object({
+  slug: z.string(),
+  name: z.string(),
+  review_mode: z.string(),
+  charter: z.record(z.string()).optional(),
+  fields: z.array(sectionField),
+});
+
+export const rulesResponse = z.object({
+  registration: siteRegistration,
+  review: z.object({
+    auto_approve_trusted: z.boolean(),
+    trusted_min_approved: z.number().int(),
+    pending_alert_hours: z.number().int(),
+  }),
+  tracker: z.object({
+    announce_interval: z.number().int(),
+    min_interval: z.number().int(),
+  }),
+  hnr: z.object({
+    enabled: z.boolean(),
+    seed_seconds: z.number().int(),
+    deadline_days: z.number().int(),
+  }),
+  sections: z.array(rulesSection),
+});
+export type RulesResponse = z.infer<typeof rulesResponse>;
