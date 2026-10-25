@@ -22,6 +22,12 @@ const envSchema = z.object({
   SESSION_SECRET: z.string().min(32).default(DEV_SESSION_SECRET),
   SEED_PASSWORD: z.string().min(8).max(200).default(DEV_SEED_PASSWORD),
 
+  /** 生产默认给 Cookie 加 Secure；本地/内网 HTTP 测试可显式关闭。 */
+  COOKIE_SECURE: z.enum(["true", "false"]).optional(),
+
+  /** 部署在 Nginx 后面时信任 X-Forwarded-*；生产默认开启。 */
+  TRUST_PROXY: z.enum(["true", "false"]).optional(),
+
   /** 标准 SMTP；全部可选，配置 SMTP_HOST + SMTP_FROM 后启用邮件。 */
   SMTP_HOST: z.string().min(1).optional(),
   SMTP_PORT: z.coerce.number().int().positive().max(65535).optional(),
@@ -52,6 +58,8 @@ export type AppConfig = {
   baseUrl: string;
   sessionSecret: string;
   seedPassword: string;
+  cookieSecure: boolean;
+  trustProxy: boolean;
   smtp: SmtpConfig | null;
 };
 
@@ -111,6 +119,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     baseUrl: data.KYOKKOU_BASE_URL.replace(/\/+$/, ""),
     sessionSecret: data.SESSION_SECRET,
     seedPassword: data.SEED_PASSWORD,
+    cookieSecure:
+      data.COOKIE_SECURE === undefined
+        ? data.NODE_ENV === "production"
+        : data.COOKIE_SECURE === "true",
+    trustProxy:
+      data.TRUST_PROXY === undefined
+        ? data.NODE_ENV === "production"
+        : data.TRUST_PROXY === "true",
     smtp,
   };
 }

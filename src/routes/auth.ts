@@ -33,7 +33,7 @@ import { parseOrThrow } from "../lib/validate.js";
 export function authRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginAsync {
   return async (app) => {
     const { db, config } = deps;
-    const cookieBase = cookieOptions(config.nodeEnv, SESSION_TTL_MS / 1000);
+    const cookieBase = cookieOptions(config.cookieSecure, SESSION_TTL_MS / 1000);
 
     /**
      * 发放/轮换 CSRF token。

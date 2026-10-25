@@ -51,7 +51,7 @@ const field = (
   display_order: displayOrder,
 });
 
-const SECTIONS: SectionSeed[] = [
+export const SECTIONS: SectionSeed[] = [
   {
     slug: "movie",
     name: "影视",

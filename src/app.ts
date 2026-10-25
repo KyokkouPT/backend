@@ -47,7 +47,11 @@ function problemBody(status: number, code: string, title: string, requestId: str
  * 生产由 server.ts 负责 listen 与优雅关闭。
  */
 export function buildApp(deps: AppDeps, options: FastifyServerOptions = {}): FastifyInstance {
-  const app = Fastify({ logger: false, ...options });
+  const app = Fastify({
+    logger: false,
+    trustProxy: deps.config.trustProxy,
+    ...options,
+  });
 
   // 未配置 SMTP 时 setMailer(null)：通知只写站内信，不尝试发邮件。
   setMailer(deps.config.smtp ? createMailer(deps.config.smtp, app.log) : null);

@@ -94,11 +94,11 @@ export async function deleteAllSessionsOfUser(db: Db, userId: number): Promise<v
   await db.deleteFrom("sessions").where("user_id", "=", userId).execute();
 }
 
-export function cookieOptions(nodeEnv: string, maxAgeSeconds: number) {
+export function cookieOptions(secure: boolean, maxAgeSeconds: number) {
   return {
     path: "/",
     sameSite: "lax" as const,
-    secure: nodeEnv === "production",
+    secure,
     maxAge: maxAgeSeconds,
   };
 }
