@@ -8,7 +8,7 @@
 - 端口：`31001`
 - 校验：zod 3
 
-> 当前进度：Phase 5 纵切（2FA + 账号设置 + Staff 举报/反作弊/审计/申诉）。健康检查、配置、三库连接、迁移（001–007）、seed、认证/CSRF、site/bootstrap/home/rules/me、目录/上传/下载、审核与通知、announce/scrape、H&R、魔力值/兑换、RSS/downhash、邀请注册、求种悬赏、排行/主页、TOTP 2FA、设置与偏好、举报/反作弊/审计/申诉已实现；站点设置/分区编辑、SMTP 实际发送与部署验证在安全加固轮完成。
+> 当前进度：Phase 5 纵切（2FA + 账号设置 + Staff 审核/举报/反作弊/审计/申诉 + 站点设置/分区编辑）。健康检查、配置、三库连接、迁移（001–007）、seed、认证/CSRF、site/bootstrap/home/rules/me、目录/上传/下载、审核与通知、announce/scrape、H&R、魔力值/兑换、RSS/downhash、邀请注册、求种悬赏、排行/主页、TOTP 2FA、设置与偏好、举报/反作弊/审计/申诉、站点设置与分区编辑已实现；SMTP 实际发送、MySQL/PG 实跑与部署验证尚未完成。
 
 ## 目录
 
@@ -28,8 +28,8 @@ backend/
 │   │   └── check.ts        # 库检查
 │   ├── lib/                # bencode/.torrent、查询、通知、H&R、魔力、downhash、TOTP、申诉、problem+json
 │   ├── tracker/            # 原始 query 解析、内存 peer 注册表、announce 持久化
-│   └── routes/             # health / auth / site / me / torrents / staff / notifications / tracker / economy / invites / requests / top / users / settings / staff-admin / appeals / reports
-├── test/                   # vitest（67 条）
+│   └── routes/             # health / auth / site / me / torrents / staff / notifications / tracker / economy / invites / requests / top / users / settings / staff-admin / appeals / reports / staff-settings
+├── test/                   # vitest（70 条）
 ├── vendor/contracts/       # 共享 DTO/zod（复制维护）
 ├── vendor/config/          # 站点设置 schema 与默认值
 ├── data/                   # 运行时 SQLite（git 忽略）
@@ -141,6 +141,9 @@ seed 开发账号（密码由 `SEED_PASSWORD` 控制，默认 `kyokkou-dev`）�
 | GET/POST | `/api/v1/staff/appeals`、`/:id/resolve` | 申诉队列与处理 |
 | GET/POST | `/api/v1/me/appeals`、`/:id/messages`、`/withdraw` | 用户申诉 |
 | POST | `/api/v1/appeals/public` | 免登录封禁申诉（校验邮箱+密码） |
+| GET/PUT | `/api/v1/staff/settings` | 站点设置（仅 admin，schema 校验后写审计） |
+| GET | `/api/v1/staff/sections` | 分区/分类读取 |
+| PUT | `/api/v1/staff/sections/:slug`、`/staff/categories/:slug` | 分区/分类编辑（写审计） |
 
 错误统一为 `application/problem+json`（`type/title/status/code/request_id/fields`）。
 
@@ -195,4 +198,4 @@ pnpm 11 只从 `pnpm-workspace.yaml` 读取 build scripts 严格度设置。本�
 
 ## 路线
 
-Phase 1 → 目录与上传审核 → Tracker/H&R/经济 → 社区 → 2FA/设置/Staff（当前）→ 安全加固与部署验证。验收标准见仓库外 `docs/16`–`docs/20`。
+Phase 1 → 目录与上传审核 → Tracker/H&R/经济 → 社区 → 2FA/设置/Staff/站点设置（当前）→ SMTP 与部署验证。验收标准见仓库外 `docs/16`–`docs/20`。

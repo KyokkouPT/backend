@@ -102,6 +102,12 @@ function buildNav(options: { loggedIn: boolean; staffPermissions: string[] }): S
         { key: "staff-anomalies", href: "/staff/anomalies", label: "反作弊", icon: "shield-alert" },
         { key: "staff-audit", href: "/staff/audit", label: "审计日志", icon: "scroll-text" },
         { key: "staff-appeals", href: "/staff/appeals", label: "申诉", icon: "clipboard-check" },
+        ...(options.staffPermissions.includes(PERMISSIONS.staffSettings)
+          ? [
+              { key: "staff-settings", href: "/staff/settings", label: "站点设置", icon: "settings" },
+              { key: "staff-sections", href: "/staff/sections", label: "分区", icon: "layers" },
+            ]
+          : []),
       ],
     });
   }

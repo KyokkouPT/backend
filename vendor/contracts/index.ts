@@ -781,3 +781,83 @@ export const appealResolveBody = z.object({
   action: z.enum(["accept", "reject"]),
   note: z.string().max(1000).optional(),
 });
+
+/* ============================ Staff 设置 / 分区 ============================ */
+
+export const staffSettings = z.object({
+  site: z.object({
+    name: z.string().min(1).max(64),
+    tagline: z.string().max(160),
+    locale: z.string().min(2).max(16),
+  }),
+  registration: z.object({
+    open: z.boolean(),
+    invite_registration_enabled: z.boolean(),
+    closed_message: z.string().max(500),
+  }),
+  tracker: z.object({
+    announce_interval: z.number().int().min(60),
+    min_interval: z.number().int().min(30),
+    peer_ttl: z.number().int().min(60),
+    max_peers: z.number().int().min(1),
+    allow_ipv6: z.boolean(),
+  }),
+  economy: z.object({
+    bonus_enabled: z.boolean(),
+    exchange_enabled: z.boolean(),
+    request_min_bounty: z.number().int().min(0),
+    request_max_bounty: z.number().int().min(0),
+  }),
+  review: z.object({
+    auto_approve_trusted: z.boolean(),
+    trusted_min_approved: z.number().int().min(0),
+    pending_alert_hours: z.number().int().min(1),
+  }),
+});
+export type StaffSettings = z.infer<typeof staffSettings>;
+
+export const staffSettingsResponse = z.object({ settings: staffSettings });
+export type StaffSettingsResponse = z.infer<typeof staffSettingsResponse>;
+
+export const updateStaffSettingsBody = z.object({
+  site: staffSettings.shape.site.partial().optional(),
+  registration: staffSettings.shape.registration.partial().optional(),
+  tracker: staffSettings.shape.tracker.partial().optional(),
+  economy: staffSettings.shape.economy.partial().optional(),
+  review: staffSettings.shape.review.partial().optional(),
+});
+export type UpdateStaffSettingsBody = z.infer<typeof updateStaffSettingsBody>;
+
+export const staffCategoryItem = z.object({
+  id: z.number().int(),
+  slug: z.string(),
+  name: z.string(),
+  display_order: z.number().int(),
+});
+
+export const staffSectionItem = z.object({
+  id: z.number().int(),
+  slug: z.string(),
+  name: z.string(),
+  display_order: z.number().int(),
+  review_mode: z.string(),
+  charter: z.string(),
+  categories: z.array(staffCategoryItem),
+});
+export type StaffSectionItem = z.infer<typeof staffSectionItem>;
+
+export const staffSectionsResponse = z.object({ items: z.array(staffSectionItem) });
+export type StaffSectionsResponse = z.infer<typeof staffSectionsResponse>;
+
+export const updateSectionBody = z.object({
+  name: z.string().min(1).max(64).optional(),
+  display_order: z.number().int().min(0).optional(),
+  review_mode: z.string().min(1).max(16).optional(),
+  charter: z.string().max(2000).optional(),
+});
+export type UpdateSectionBody = z.infer<typeof updateSectionBody>;
+
+export const updateCategoryBody = z.object({
+  name: z.string().min(1).max(64).optional(),
+  display_order: z.number().int().min(0).optional(),
+});
