@@ -17,10 +17,12 @@ import {
   type TorrentSummary,
 } from "@kyokkou/contracts";
 import type { Settings } from "@kyokkou/config";
+import { PERMISSIONS } from "@kyokkou/contracts";
 import type { AppConfig } from "../config.js";
 import { APP_VERSION } from "../version.js";
 import type { Db } from "../db/db.js";
 import { permissionsFor } from "../auth/permissions.js";
+import { unreadNotificationCount } from "../lib/notifications.js";
 import { loadSettings } from "../lib/settings.js";
 import { numberCount, toTorrentSummary, toUserSummary, type TorrentJoinRow } from "../lib/serialize.js";
 
@@ -61,25 +63,37 @@ function toSiteIdentity(settings: Settings, version: string): SiteIdentity {
  * 导航由后端按“已实现页面”生成，避免前端出现死链。
  * 图标是字符串 key，前端映射到 lucide 组件。
  */
-function buildNav(loggedIn: boolean): SiteNav {
+function buildNav(options: { loggedIn: boolean; canReview: boolean }): SiteNav {
   const groups: NavGroup[] = [
     {
       items: [
         { key: "home", href: "/", label: "首页", icon: "home", exact: true },
+        { key: "browse", href: "/browse", label: "浏览", icon: "compass" },
         { key: "rules", href: "/rules", label: "规则", icon: "book-open" },
       ],
     },
   ];
 
-  if (loggedIn) {
+  if (options.loggedIn) {
     groups.push({
       label: "我的",
-      items: [{ key: "me", href: "/me", label: "概览", icon: "user", exact: true }],
+      items: [
+        { key: "me", href: "/me", label: "概览", icon: "user", exact: true },
+        { key: "upload", href: "/upload", label: "发布", icon: "upload" },
+      ],
     });
   }
 
-  // 站务页面在后续纵切上线前不返回，避免死链；权限仍在 permissions 里。
-  return { site: groups, staff: [] };
+  const staff: NavGroup[] = [];
+  if (options.canReview) {
+    staff.push({
+      items: [
+        { key: "staff-review", href: "/staff/review", label: "审核台", icon: "clipboard-check" },
+      ],
+    });
+  }
+
+  return { site: groups, staff };
 }
 
 function parseCharter(raw: unknown): Record<string, string> | undefined {
@@ -133,7 +147,7 @@ async function loadSections(db: Db): Promise<Section[]> {
   });
 }
 
-async function loadCounts(db: Db): Promise<BootstrapCounts> {
+async function loadCounts(db: Db, userId: number | null): Promise<BootstrapCounts> {
   const pending = await db
     .selectFrom("torrents")
     .select((eb) => eb.fn.countAll<number>().as("count"))
@@ -143,10 +157,10 @@ async function loadCounts(db: Db): Promise<BootstrapCounts> {
 
   return {
     pending_review: numberCount(pending),
-    // reports / anomalies / notifications 表在后续纵切创建
+    // reports / anomalies 表在后续纵切创建
     open_reports: 0,
     anomalies: 0,
-    unread: 0,
+    unread: userId === null ? 0 : await unreadNotificationCount(db, userId),
   };
 }
 
@@ -334,18 +348,22 @@ export function siteRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginAs
     });
 
     app.get(`${API_PREFIX}/bootstrap`, async (request) => {
+      const auth = request.auth;
+      const permissions = auth ? permissionsFor(auth.user.role) : [];
       const [settings, sections, counts] = await Promise.all([
         loadSettings(db),
         loadSections(db),
-        loadCounts(db),
+        loadCounts(db, auth ? Number(auth.user.id) : null),
       ]);
-      const auth = request.auth;
 
       return bootstrap.parse({
         site: toSiteIdentity(settings, APP_VERSION),
-        nav: buildNav(Boolean(auth)),
+        nav: buildNav({
+          loggedIn: Boolean(auth),
+          canReview: permissions.includes(PERMISSIONS.staffReview),
+        }),
         sections,
-        permissions: auth ? permissionsFor(auth.user.role) : [],
+        permissions,
         counts,
         me: auth ? toUserSummary(auth.user) : null,
         config_version: "1",
@@ -365,7 +383,12 @@ export function siteRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginAs
         latest,
         announcements,
         promos,
-        my: request.auth ? { unread: 0, hnr_due: 0 } : null,
+        my: request.auth
+          ? {
+              unread: await unreadNotificationCount(db, Number(request.auth.user.id)),
+              hnr_due: 0,
+            }
+          : null,
       });
     });
 

@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify";
 import cookie from "@fastify/cookie";
 import helmet from "@fastify/helmet";
+import multipart from "@fastify/multipart";
 import rateLimit from "@fastify/rate-limit";
 import type { AppConfig } from "./config.js";
 import type { Db } from "./db/db.js";
@@ -10,6 +11,9 @@ import { healthRoute } from "./routes/health.js";
 import { authRoutes } from "./routes/auth.js";
 import { siteRoutes } from "./routes/site.js";
 import { meRoutes } from "./routes/me.js";
+import { torrentRoutes } from "./routes/torrents.js";
+import { staffRoutes } from "./routes/staff.js";
+import { notificationRoutes } from "./routes/notifications.js";
 
 export type AppDeps = {
   db: Db;
@@ -36,6 +40,7 @@ export function buildApp(deps: AppDeps, options: FastifyServerOptions = {}): Fas
   app.register(cookie);
   app.register(helmet, { contentSecurityPolicy: false });
   app.register(rateLimit, { global: true, max: 600, timeWindow: "1 minute" });
+  app.register(multipart, { limits: { fileSize: 5 * 1024 * 1024, files: 1 } });
 
   // onRequest：解析 kp_session → request.auth（未登录为 null）。
   app.addHook("onRequest", createAuthHook(deps.db));
@@ -78,6 +83,9 @@ export function buildApp(deps: AppDeps, options: FastifyServerOptions = {}): Fas
   app.register(authRoutes(deps));
   app.register(siteRoutes(deps));
   app.register(meRoutes(deps));
+  app.register(torrentRoutes(deps));
+  app.register(staffRoutes(deps));
+  app.register(notificationRoutes({ db: deps.db }));
 
   return app;
 }

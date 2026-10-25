@@ -22,6 +22,7 @@ import {
   sha256,
 } from "../auth/session.js";
 import { HttpProblem } from "../lib/problem.js";
+import { unreadNotificationCount } from "../lib/notifications.js";
 import { numberCount, toUserSummary } from "../lib/serialize.js";
 import { parseOrThrow } from "../lib/validate.js";
 
@@ -122,7 +123,7 @@ export function authRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginAs
       return authMeResponse.parse({
         user: toUserSummary(auth.user),
         permissions: permissionsFor(auth.user.role),
-        unread_count: 0,
+        unread_count: await unreadNotificationCount(db, Number(auth.user.id)),
         todo: { pending_review: numberCount(pending) },
       });
     });

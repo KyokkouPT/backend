@@ -27,7 +27,10 @@ describe("migrations", () => {
         .selectFrom("schema_migrations")
         .select(["version", "name"])
         .execute();
-      expect(rows).toEqual([{ version: 1, name: "init" }]);
+      expect(rows).toEqual([
+        { version: 1, name: "init" },
+        { version: 2, name: "notifications" },
+      ]);
 
       const users = await db.selectFrom("users").selectAll().execute();
       expect(users).toEqual([]);

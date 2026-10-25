@@ -20,6 +20,7 @@
   "dependencies": {
     "@fastify/cookie": "^11.1.3",
     "@fastify/helmet": "^13.2.0",
+    "@fastify/multipart": "^10.1.6",
     "@fastify/rate-limit": "^11.2.1",
     "@kyokkou/config": "file:vendor/config",
     "@kyokkou/contracts": "file:vendor/contracts",

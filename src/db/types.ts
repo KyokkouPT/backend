@@ -167,6 +167,17 @@ export interface SnatchesTable {
   status: string;
 }
 
+export interface NotificationsTable {
+  id: Generated<number>;
+  user_id: number;
+  kind: string;
+  title: string;
+  body: string;
+  link_url: string | null;
+  read_at: number | null;
+  created_at: number;
+}
+
 export interface Database {
   instance_meta: InstanceMetaTable;
   schema_migrations: SchemaMigrationsTable;
@@ -184,4 +195,5 @@ export interface Database {
   promo_events: PromoEventsTable;
   announcements: AnnouncementsTable;
   snatches: SnatchesTable;
+  notifications: NotificationsTable;
 }

@@ -354,3 +354,62 @@ export const rulesResponse = z.object({
   sections: z.array(rulesSection),
 });
 export type RulesResponse = z.infer<typeof rulesResponse>;
+
+/* ============================ 目录 / 上传 / 审核 / 通知 ============================ */
+
+export const torrentListResponse = z.object({
+  items: z.array(torrentSummary),
+  next_cursor: z.string().nullable(),
+});
+export type TorrentListResponse = z.infer<typeof torrentListResponse>;
+
+export const torrentFile = z.object({ path: z.string(), size: z.number() });
+export type TorrentFile = z.infer<typeof torrentFile>;
+
+export const torrentDetail = torrentSummary.extend({
+  info_hash: z.string(),
+  description: z.string().nullable(),
+  files: z.array(torrentFile),
+  related: z.array(torrentSummary),
+});
+export type TorrentDetail = z.infer<typeof torrentDetail>;
+
+export const uploadResponse = z.object({
+  id: z.number().int(),
+  status: z.enum(["pending", "approved", "rejected"]),
+  message: z.string(),
+});
+export type UploadResponse = z.infer<typeof uploadResponse>;
+
+export const reviewReason = z.object({
+  key: z.string(),
+  label: z.string(),
+  detail: z.string(),
+});
+export type ReviewReason = z.infer<typeof reviewReason>;
+
+export const reviewReasonsResponse = z.object({ reasons: z.array(reviewReason) });
+export type ReviewReasonsResponse = z.infer<typeof reviewReasonsResponse>;
+
+export const reviewQueueResponse = z.object({ items: z.array(torrentDetail) });
+export type ReviewQueueResponse = z.infer<typeof reviewQueueResponse>;
+
+export const reviewActionResponse = z.object({ ok: z.boolean(), status: z.string() });
+export type ReviewActionResponse = z.infer<typeof reviewActionResponse>;
+
+export const notificationItem = z.object({
+  id: z.number().int(),
+  kind: z.string(),
+  title: z.string(),
+  body: z.string(),
+  link_url: z.string().nullable(),
+  read_at: z.number().nullable(),
+  created_at: z.number(),
+});
+export type NotificationItem = z.infer<typeof notificationItem>;
+
+export const notificationsResponse = z.object({
+  items: z.array(notificationItem),
+  unread: z.number().int(),
+});
+export type NotificationsResponse = z.infer<typeof notificationsResponse>;

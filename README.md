@@ -8,7 +8,7 @@
 - 端口：`31001`
 - 校验：zod 3
 
-> 当前进度：Phase 1 纵切（bootstrap + auth + shell）。健康检查、配置、三库连接、迁移、seed、认证/CSRF、site/bootstrap/home/rules/me 已实现；目录、上传、Tracker、经济、社区、Staff 按后续纵切加入。
+> 当前进度：Phase 2 纵切（目录 + 上传审核）。健康检查、配置、三库连接、迁移（001–002）、seed、认证/CSRF、site/bootstrap/home/rules/me、种子列表/详情/上传/下载、Staff 审核与站内通知已实现；Tracker、经济、社区其余部分与 Staff 其余页面按后续纵切加入。
 
 ## 目录
 
@@ -23,11 +23,11 @@ backend/
 │   │   ├── db.ts           # Kysely + better-sqlite3 / mysql2 / pg
 │   │   ├── types.ts        # Database 类型（迁移 001 范围）
 │   │   ├── migrate.ts      # 有序迁移执行器
-│   │   ├── migrations/     # 001_init
+│   │   ├── migrations/     # 001_init · 002_notifications
 │   │   ├── seed.ts         # 幂等 seed
 │   │   └── check.ts        # 库检查
-│   ├── lib/                # problem+json、设置、序列化、校验
-│   └── routes/             # health / auth / site / me
+│   ├── lib/                # bencode/.torrent、查询、通知、problem+json、设置、序列化
+│   └── routes/             # health / auth / site / me / torrents / staff / notifications
 ├── test/                   # vitest（20 条）
 ├── vendor/contracts/       # 共享 DTO/zod（复制维护）
 ├── vendor/config/          # 站点设置 schema 与默认值
@@ -62,7 +62,7 @@ seed 开发账号（密码由 `SEED_PASSWORD` 控制，默认 `kyokkou-dev`）�
 | `pnpm build` | `tsc -p tsconfig.build.json` 输出到 `dist/` |
 | `pnpm start` | 用 tsx 加载器运行 `dist/server.js`（原因见下） |
 | `pnpm typecheck` | `tsc --noEmit` |
-| `pnpm test` | vitest（认证、CSRF、bootstrap、home、rules、me、迁移/seed 幂等、密码哈希） |
+| `pnpm test` | vitest（30 条：认证/CSRF、bootstrap/home/rules/me、目录筛选、上传审核、下载原始字节、通知、迁移/seed 幂等） |
 | `pnpm migrate` | 执行未应用的迁移 |
 | `pnpm seed` | 幂等 seed |
 | `pnpm db:check` | 打印驱动、schema 版本与各表行数 |
@@ -83,6 +83,7 @@ seed 开发账号（密码由 `SEED_PASSWORD` 控制，默认 `kyokkou-dev`）�
 ## 数据库与迁移
 
 - 迁移在 `src/db/migrations/NNN_name.ts`，按 `version` 顺序执行，记录在 `schema_migrations`。
+- 当前：001_init（基础表）、002_notifications（站内通知；审核结果需要通知发布者）。
 - SQLite / PostgreSQL 的迁移在一个事务里；MySQL/MariaDB 的 DDL 非事务，失败会明确抛错，重试前需人工检查。
 - 主键按方言生成：SQLite `integer primary key autoincrement`、MySQL `bigint auto_increment`、PostgreSQL `bigserial`。
 - 计数/时间戳是 bigint 列，应用层统一 number（写入 < 2^53）；PostgreSQL 的 int8 在 `db.ts` 里解析为 number。
@@ -102,6 +103,15 @@ seed 开发账号（密码由 `SEED_PASSWORD` 控制，默认 `kyokkou-dev`）�
 | POST | `/api/v1/auth/logout` | 需 session + CSRF |
 | GET | `/api/v1/auth/me` | 当前用户/权限/待办 |
 | GET | `/api/v1/me` | 用户/统计/H&R/snatches |
+| GET | `/api/v1/torrents` | 列表；section/category/promo/uploader/q/sort/since/until/`field.*` + limit/cursor |
+| GET | `/api/v1/torrents/:id` | 详情：files/description/info_hash/related |
+| POST | `/api/v1/torrents` | multipart 上传（`file/section/category/name/description/promo/tags/meta`，≤5MB） |
+| GET | `/t/:id/download` | `.torrent` 下载；替换 announce 并注入当前 passkey，info 原始字节不变 |
+| GET | `/api/v1/staff/review` | 待审队列（`staff.review`） |
+| GET | `/api/v1/staff/review/reasons` | 驳回模板 |
+| POST | `/api/v1/staff/review/:id/:action` | approve / reject / return；写审计并通知发布者 |
+| GET | `/api/v1/notifications` | 站内通知 + 未读数 |
+| POST | `/api/v1/notifications/:id/read`、`/read-all` | 单条 / 全部已读 |
 
 错误统一为 `application/problem+json`（`type/title/status/code/request_id/fields`）。
 
@@ -113,6 +123,13 @@ seed 开发账号（密码由 `SEED_PASSWORD` 控制，默认 `kyokkou-dev`）�
 - 登录失败统一返回 `invalid_credentials`，不泄露账号是否存在；用户不存在也跑一次等价 KDF。
 - 停用/封禁用户：`status` 非 active 时拒绝登录，并在解析 session 时清除旧会话。
 - 全局 rate limit 600/min，登录 20/min；helmet 已启用。
+
+## `.torrent` 与 info 原始字节
+
+- 上传时用自研 bencode 解析器取 `info` 字典的原始区间，`info_hash = sha1(info 原始字节)`；数据库同时保存原始 `.torrent`（`torrents.torrent_blob`）。
+- 下载时只重写顶层 `announce`（删除 `announce-list`），其余字段沿用原始字节片段，`info` 完全不动，所以 info_hash 不变。
+- 下载端点需要登录（Cookie）；未登录返回 problem+json 401。RSS/downhash 在后续纵切接入。
+- 上传大小上限 5MB（multipart + handler 双重校验），`info_hash` 重复返回 409。
 
 ## 本地无 `X-Kyou-Secret`
 
