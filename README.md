@@ -8,7 +8,7 @@
 - 端口：`31001`
 - 校验：zod 3
 
-> 当前进度：Phase 2 纵切（目录 + 上传审核）。健康检查、配置、三库连接、迁移（001–002）、seed、认证/CSRF、site/bootstrap/home/rules/me、种子列表/详情/上传/下载、Staff 审核与站内通知已实现；Tracker、经济、社区其余部分与 Staff 其余页面按后续纵切加入。
+> 当前进度：Phase 3 纵切（Tracker + H&R + 经济 + RSS）。健康检查、配置、三库连接、迁移（001–004）、seed、认证/CSRF、site/bootstrap/home/rules/me、目录/上传/下载、Staff 审核与通知、announce/scrape、H&R、魔力值与兑换、RSS/downhash 已实现；社区其余部分与 Staff 其余页面按后续纵切加入。
 
 ## 目录
 
@@ -21,14 +21,15 @@ backend/
 │   ├── auth/               # scrypt、session、CSRF、权限
 │   ├── db/
 │   │   ├── db.ts           # Kysely + better-sqlite3 / mysql2 / pg
-│   │   ├── types.ts        # Database 类型（迁移 001 范围）
+│   │   ├── types.ts        # Database 类型（迁移 001–004）
 │   │   ├── migrate.ts      # 有序迁移执行器
-│   │   ├── migrations/     # 001_init · 002_notifications
+│   │   ├── migrations/     # 001_init · 002_notifications · 003_tracker · 004_economy
 │   │   ├── seed.ts         # 幂等 seed
 │   │   └── check.ts        # 库检查
-│   ├── lib/                # bencode/.torrent、查询、通知、problem+json、设置、序列化
-│   └── routes/             # health / auth / site / me / torrents / staff / notifications
-├── test/                   # vitest（20 条）
+│   ├── lib/                # bencode/.torrent、查询、通知、H&R、魔力、downhash、problem+json
+│   ├── tracker/            # 原始 query 解析、内存 peer 注册表、announce 持久化
+│   └── routes/             # health / auth / site / me / torrents / staff / notifications / tracker / economy
+├── test/                   # vitest（47 条）
 ├── vendor/contracts/       # 共享 DTO/zod（复制维护）
 ├── vendor/config/          # 站点设置 schema 与默认值
 ├── data/                   # 运行时 SQLite（git 忽略）
@@ -62,7 +63,7 @@ seed 开发账号（密码由 `SEED_PASSWORD` 控制，默认 `kyokkou-dev`）�
 | `pnpm build` | `tsc -p tsconfig.build.json` 输出到 `dist/` |
 | `pnpm start` | 用 tsx 加载器运行 `dist/server.js`（原因见下） |
 | `pnpm typecheck` | `tsc --noEmit` |
-| `pnpm test` | vitest（30 条：认证/CSRF、bootstrap/home/rules/me、目录筛选、上传审核、下载原始字节、通知、迁移/seed 幂等） |
+| `pnpm test` | vitest（47 条：认证/CSRF、bootstrap/home/rules/me、目录筛选、上传审核、下载原始字节、通知、Tracker/compact/H&R、兑换/幂等/冻结、RSS/downhash、迁移/seed 幂等） |
 | `pnpm migrate` | 执行未应用的迁移 |
 | `pnpm seed` | 幂等 seed |
 | `pnpm db:check` | 打印驱动、schema 版本与各表行数 |
@@ -112,6 +113,13 @@ seed 开发账号（密码由 `SEED_PASSWORD` 控制，默认 `kyokkou-dev`）�
 | POST | `/api/v1/staff/review/:id/:action` | approve / reject / return；写审计并通知发布者 |
 | GET | `/api/v1/notifications` | 站内通知 + 未读数 |
 | POST | `/api/v1/notifications/:id/read`、`/read-all` | 单条 / 全部已读 |
+| GET | `/announce`、`/announce/:passkey` | Tracker announce；原始字节 info_hash/peer_id |
+| GET | `/scrape`、`/scrape/:passkey` | scrape；返回 20 字节原始 info_hash |
+| GET | `/rss`、`/rss.xml` | passkey RSS；enclosure 使用短期 downhash |
+| GET | `/api/v1/me/bonus` | 余额/每小时产出/账本/兑换项/冻结 |
+| GET | `/api/v1/me/ledger` | 魔力账本 |
+| POST | `/api/v1/me/exchange/:key` | 兑换；支持 `Idempotency-Key` |
+| GET | `/api/v1/me/rss` | 个人 RSS 地址 |
 
 错误统一为 `application/problem+json`（`type/title/status/code/request_id/fields`）。
 
@@ -128,8 +136,20 @@ seed 开发账号（密码由 `SEED_PASSWORD` 控制，默认 `kyokkou-dev`）�
 
 - 上传时用自研 bencode 解析器取 `info` 字典的原始区间，`info_hash = sha1(info 原始字节)`；数据库同时保存原始 `.torrent`（`torrents.torrent_blob`）。
 - 下载时只重写顶层 `announce`（删除 `announce-list`），其余字段沿用原始字节片段，`info` 完全不动，所以 info_hash 不变。
-- 下载端点需要登录（Cookie）；未登录返回 problem+json 401。RSS/downhash 在后续纵切接入。
+- 下载端点接受 Cookie 或 `?downhash=`（RSS 场景）；两者都注入对应用户 passkey，未通过校验返回 401。
 - 上传大小上限 5MB（multipart + handler 双重校验），`info_hash` 重复返回 409。
+
+## Tracker、H&R 与经济
+
+- announce/scrape 从 `request.raw.url` 自行解析，`info_hash`/`peer_id` percent-decode 成 Buffer，永不先做 UTF-8 解码。
+- peer 注册表在内存（Map），重启后 peers 丢失是可接受行为；统计计数已持久化。维护任务按 TTL 清理过期 peer。
+- 计数只增不减（`max(old, new)`）；`event=completed` 只累计一次；promo 影响站点统计（free 不计下载、2x 上传双倍、50/30 打折）。
+- 下载量达到策略阈值创建 H&R 义务；维护任务每 10 分钟结算 `reached` / `unreached`。
+- 魔力值在 `/me/bonus` 按 `last_bonus_at` 结算（按需，不依赖后台）；冻结期间产出 0、兑换返回 403。
+- 兑换支持库存/限次/幂等键；余额变更写 `bonus_ledger`，兑换写 `redemptions`。
+- RSS enclosure 使用 `uid|JWT` 形式的 downhash（HS256，key = sha256(SESSION_SECRET + passkey)），下载无需 Cookie。
+
+> **本地 Tracker 测试要直连后端**：Next rewrites 在代理二进制 query 时会破坏 `%XX` 编码，导致 `info_hash` 长度不对。本地请用 `http://127.0.0.1:31001/announce/...` 验证；生产由前端 Nginx 直接反代到后端 Nginx，不经过 Next，原始字节完整。
 
 ## 本地无 `X-Kyou-Secret`
 
@@ -154,4 +174,4 @@ pnpm 11 只从 `pnpm-workspace.yaml` 读取 build scripts 严格度设置。本�
 
 ## 路线
 
-Phase 1（当前）→ 目录与上传审核 → Tracker/H&R/经济 → 社区/Staff → 安全加固。验收标准见仓库外 `docs/16`–`docs/20`。
+Phase 1 → 目录与上传审核 → Tracker/H&R/经济（当前）→ 社区/Staff → 安全加固。验收标准见仓库外 `docs/16`–`docs/20`。

@@ -14,6 +14,8 @@ import { meRoutes } from "./routes/me.js";
 import { torrentRoutes } from "./routes/torrents.js";
 import { staffRoutes } from "./routes/staff.js";
 import { notificationRoutes } from "./routes/notifications.js";
+import { trackerRoutes } from "./routes/tracker.js";
+import { economyRoutes } from "./routes/economy.js";
 
 export type AppDeps = {
   db: Db;
@@ -86,6 +88,8 @@ export function buildApp(deps: AppDeps, options: FastifyServerOptions = {}): Fas
   app.register(torrentRoutes(deps));
   app.register(staffRoutes(deps));
   app.register(notificationRoutes({ db: deps.db }));
+  app.register(trackerRoutes(deps));
+  app.register(economyRoutes(deps));
 
   return app;
 }

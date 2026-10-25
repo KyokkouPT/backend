@@ -30,6 +30,8 @@ describe("migrations", () => {
       expect(rows).toEqual([
         { version: 1, name: "init" },
         { version: 2, name: "notifications" },
+        { version: 3, name: "tracker" },
+        { version: 4, name: "economy" },
       ]);
 
       const users = await db.selectFrom("users").selectAll().execute();

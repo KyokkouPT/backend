@@ -2,6 +2,11 @@ import { buildApp } from "./app.js";
 import { ConfigError, loadConfig } from "./config.js";
 import { createDb } from "./db/db.js";
 import { currentSchemaVersion, runMigrations } from "./db/migrate.js";
+import { settleHnr } from "./lib/hnr.js";
+import { prunePeers } from "./tracker/registry.js";
+
+const PEER_TTL_MS = 60 * 60 * 1000;
+const MAINTENANCE_INTERVAL_MS = 10 * 60 * 1000;
 
 async function main(): Promise<void> {
   let config;
@@ -58,6 +63,22 @@ async function main(): Promise<void> {
     await db.destroy();
     process.exit(1);
   }
+
+  // 维护任务：H&R 义务结算 + 过期 peer 清理。unref 不阻塞退出。
+  const hnrTimer = setInterval(() => {
+    void settleHnr(db)
+      .then((changed) => {
+        if (changed > 0) app.log.info({ changed }, "hnr obligations settled");
+      })
+      .catch((error: unknown) => app.log.error(error, "hnr settlement failed"));
+  }, MAINTENANCE_INTERVAL_MS);
+  hnrTimer.unref();
+
+  const peerTimer = setInterval(() => {
+    const removed = prunePeers(PEER_TTL_MS);
+    if (removed > 0) app.log.debug({ removed }, "pruned stale peers");
+  }, MAINTENANCE_INTERVAL_MS);
+  peerTimer.unref();
 }
 
 void main();

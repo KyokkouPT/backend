@@ -59,6 +59,8 @@ export interface UsersTable {
   invited_by: number | null;
   created_at: number;
   last_seen_at: number | null;
+  bonus_frozen_until: number | null;
+  last_bonus_at: number | null;
 }
 
 export interface SessionsTable {
@@ -165,6 +167,67 @@ export interface SnatchesTable {
   seedtime: number;
   last_announce_at: number | null;
   status: string;
+  completed_at: number | null;
+}
+
+export interface HnrPoliciesTable {
+  id: Generated<number>;
+  section_id: number | null;
+  enabled: number;
+  include_rate: number;
+  min_download: number;
+  seed_seconds: number;
+  deadline_days: number;
+  exempt_json: string | null;
+  created_at: number;
+}
+
+export interface HnrObligationsTable {
+  id: Generated<number>;
+  user_id: number;
+  torrent_id: number;
+  policy_id: number | null;
+  required_seconds: number;
+  seeded_seconds: number;
+  deadline_at: number;
+  status: string;
+  resolved_at: number | null;
+  created_at: number;
+}
+
+export interface BonusLedgerTable {
+  id: Generated<number>;
+  user_id: number;
+  kind: string;
+  delta: number;
+  balance_after: number;
+  ref_type: string | null;
+  ref_id: string | null;
+  note: string | null;
+  created_at: number;
+}
+
+export interface ExchangeItemsTable {
+  id: Generated<number>;
+  key: string;
+  name: string;
+  description: string | null;
+  price: number;
+  inventory: number | null;
+  limit_per_user: number | null;
+  enabled: number;
+  payload_json: string;
+  display_order: number;
+}
+
+export interface RedemptionsTable {
+  id: Generated<number>;
+  user_id: number;
+  item_id: number;
+  price: number;
+  status: string;
+  idempotency_key: string | null;
+  created_at: number;
 }
 
 export interface NotificationsTable {
@@ -196,4 +259,9 @@ export interface Database {
   announcements: AnnouncementsTable;
   snatches: SnatchesTable;
   notifications: NotificationsTable;
+  hnr_policies: HnrPoliciesTable;
+  hnr_obligations: HnrObligationsTable;
+  bonus_ledger: BonusLedgerTable;
+  exchange_items: ExchangeItemsTable;
+  redemptions: RedemptionsTable;
 }

@@ -79,7 +79,11 @@ function buildNav(options: { loggedIn: boolean; canReview: boolean }): SiteNav {
       label: "我的",
       items: [
         { key: "me", href: "/me", label: "概览", icon: "user", exact: true },
+        { key: "me-seeding", href: "/me/seeding", label: "做种", icon: "upload" },
+        { key: "me-leeching", href: "/me/leeching", label: "下载", icon: "download" },
+        { key: "me-bonus", href: "/me/bonus", label: "魔力值", icon: "sparkles" },
         { key: "upload", href: "/upload", label: "发布", icon: "upload" },
+        { key: "rss", href: "/me/rss", label: "RSS", icon: "scroll-text" },
       ],
     });
   }

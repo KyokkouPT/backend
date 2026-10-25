@@ -313,6 +313,7 @@ export const snatchItem = z.object({
   downloaded: z.number(),
   seedtime: z.number(),
   last_announce_at: z.number().nullable(),
+  status: z.string(),
 });
 
 export const meResponse = z.object({
@@ -324,6 +325,9 @@ export const meResponse = z.object({
   }),
   hnr: z.array(hnrItem),
   snatches: z.array(snatchItem),
+  rss_url: z.string(),
+  bonus_yield_per_hour: z.number(),
+  bonus_frozen_until: z.number().nullable(),
 });
 export type MeResponse = z.infer<typeof meResponse>;
 
@@ -413,3 +417,50 @@ export const notificationsResponse = z.object({
   unread: z.number().int(),
 });
 export type NotificationsResponse = z.infer<typeof notificationsResponse>;
+
+/* ============================ 经济 / RSS ============================ */
+
+export const ledgerEntry = z.object({
+  id: z.number().int(),
+  kind: z.string(),
+  delta: z.number(),
+  balance_after: z.number(),
+  note: z.string().nullable(),
+  created_at: z.number(),
+});
+export type LedgerEntry = z.infer<typeof ledgerEntry>;
+
+export const exchangeItem = z.object({
+  key: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  price: z.number(),
+  inventory: z.number().nullable(),
+  limit_per_user: z.number().nullable(),
+  enabled: z.boolean(),
+  payload_type: z.string(),
+});
+export type ExchangeItem = z.infer<typeof exchangeItem>;
+
+export const bonusResponse = z.object({
+  balance: z.number(),
+  yield_per_hour: z.number(),
+  frozen_until: z.number().nullable(),
+  ledger: z.array(ledgerEntry),
+  items: z.array(exchangeItem),
+});
+export type BonusResponse = z.infer<typeof bonusResponse>;
+
+export const exchangeResponse = z.object({
+  ok: z.boolean(),
+  balance: z.number(),
+  item_key: z.string(),
+  message: z.string(),
+});
+export type ExchangeResponse = z.infer<typeof exchangeResponse>;
+
+export const ledgerResponse = z.object({ items: z.array(ledgerEntry) });
+export type LedgerResponse = z.infer<typeof ledgerResponse>;
+
+export const rssResponse = z.object({ url: z.string() });
+export type RssResponse = z.infer<typeof rssResponse>;

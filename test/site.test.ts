@@ -135,14 +135,17 @@ describe("site / bootstrap / home / rules", () => {
       user: { username: string; uploaded: number; ratio: number | null };
       stats: { published: number; seeding: number; leeching: number };
       hnr: unknown[];
-      snatches: unknown[];
+      snatches: { status: string }[];
+      rss_url: string;
     };
     expect(body.user.username).toBe("lightbringer");
     expect(body.user.uploaded).toBeGreaterThan(0);
     expect(body.user.ratio).toBeGreaterThan(0);
     expect(body.stats.published).toBeGreaterThanOrEqual(1);
     expect(body.hnr).toEqual([]);
-    expect(body.snatches).toEqual([]);
+    expect(body.snatches.length).toBeGreaterThan(0);
+    expect(body.snatches[0]?.status).toBeTruthy();
+    expect(body.rss_url).toContain("/rss?passkey=");
   });
 
   it("unknown API paths return problem+json 404", async () => {

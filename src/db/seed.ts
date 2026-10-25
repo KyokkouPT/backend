@@ -659,6 +659,171 @@ export async function seedDatabase(db: Db, options: { password: string }): Promi
     }
   }
 
+  // 经济与 H&R 初始数据
+  const existingPolicy = await db
+    .selectFrom("hnr_policies")
+    .select("id")
+    .where("section_id", "is", null)
+    .executeTakeFirst();
+  if (!existingPolicy) {
+    await db
+      .insertInto("hnr_policies")
+      .values({
+        section_id: null,
+        enabled: 1,
+        include_rate: 100,
+        min_download: 10 * GB,
+        seed_seconds: 72 * 3600,
+        deadline_days: 14,
+        exempt_json: null,
+        created_at: now,
+      })
+      .execute();
+  }
+
+  const exchangeSeeds = [
+    {
+      key: "upload_10gb",
+      name: "10 GB 上传量",
+      description: "把 10 GB 上传量加到账号。",
+      price: 5000,
+      amount: 10 * GB,
+      display_order: 0,
+    },
+    {
+      key: "upload_50gb",
+      name: "50 GB 上传量",
+      description: "把 50 GB 上传量加到账号。",
+      price: 20000,
+      amount: 50 * GB,
+      display_order: 1,
+    },
+    {
+      key: "upload_100gb",
+      name: "100 GB 上传量",
+      description: "把 100 GB 上传量加到账号。",
+      price: 36000,
+      amount: 100 * GB,
+      display_order: 2,
+    },
+  ];
+  for (const item of exchangeSeeds) {
+    const existing = await db
+      .selectFrom("exchange_items")
+      .select("id")
+      .where("key", "=", item.key)
+      .executeTakeFirst();
+    if (!existing) {
+      await db
+        .insertInto("exchange_items")
+        .values({
+          key: item.key,
+          name: item.name,
+          description: item.description,
+          price: item.price,
+          inventory: null,
+          limit_per_user: null,
+          enabled: 1,
+          payload_json: JSON.stringify({ type: "upload", amount: item.amount }),
+          display_order: item.display_order,
+        })
+        .execute();
+    }
+  }
+
+  const snatchSeeds = [
+    {
+      username: "lightbringer",
+      infoHash: "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b",
+      uploaded: Math.round(412.8 * GB),
+      downloaded: Math.round(32.2 * GB),
+      seedtime: 142 * 3600 + 12 * 60,
+      status: "seeding",
+    },
+    {
+      username: "lightbringer",
+      infoHash: "2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c",
+      uploaded: Math.round(1.4 * GB),
+      downloaded: Math.round(12.1 * GB),
+      seedtime: 0,
+      status: "leeching",
+    },
+    {
+      username: "阿雪",
+      infoHash: "6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a",
+      uploaded: Math.round(18.2 * GB),
+      downloaded: Math.round(1.4 * GB),
+      seedtime: 30 * 3600,
+      status: "seeding",
+    },
+  ];
+  for (const snatch of snatchSeeds) {
+    const userId = userIds.get(snatch.username);
+    const torrentId = torrentIds.get(snatch.infoHash);
+    if (userId === undefined || torrentId === undefined) continue;
+
+    const existing = await db
+      .selectFrom("snatches")
+      .select("id")
+      .where("user_id", "=", userId)
+      .where("torrent_id", "=", torrentId)
+      .executeTakeFirst();
+    if (!existing) {
+      await db
+        .insertInto("snatches")
+        .values({
+          user_id: userId,
+          torrent_id: torrentId,
+          uploaded: snatch.uploaded,
+          downloaded: snatch.downloaded,
+          seedtime: snatch.seedtime,
+          last_announce_at: now - 12 * 60 * 1000,
+          status: snatch.status,
+          completed_at: snatch.status === "seeding" ? now - 24 * HOUR : null,
+        })
+        .execute();
+    }
+  }
+
+  const ledgerCount = await db
+    .selectFrom("bonus_ledger")
+    .select((eb) => eb.fn.countAll<number>().as("count"))
+    .executeTakeFirst();
+  if (Number(ledgerCount?.count ?? 0) === 0) {
+    const userId = userIds.get("lightbringer");
+    if (userId !== undefined) {
+      const user = await db
+        .selectFrom("users")
+        .select("bonus")
+        .where("id", "=", userId)
+        .executeTakeFirst();
+      await db
+        .insertInto("bonus_ledger")
+        .values({
+          user_id: userId,
+          kind: "grant",
+          delta: Number(user?.bonus ?? 0),
+          balance_after: Number(user?.bonus ?? 0),
+          ref_type: "seed",
+          ref_id: null,
+          note: "初始魔力值",
+          created_at: now - 48 * HOUR,
+        })
+        .execute();
+    }
+  }
+
+  // 首次访问 /me/bonus 时只推进结算时间，不补发历史产出。
+  const lightbringerId = userIds.get("lightbringer");
+  if (lightbringerId !== undefined) {
+    await db
+      .updateTable("users")
+      .set({ last_bonus_at: now })
+      .where("id", "=", lightbringerId)
+      .where("last_bonus_at", "is", null)
+      .execute();
+  }
+
   // 实例元数据
   const meta = await db.selectFrom("instance_meta").selectAll().executeTakeFirst();
   let instanceId: string;

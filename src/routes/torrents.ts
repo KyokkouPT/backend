@@ -12,6 +12,7 @@ import type { Db } from "../db/db.js";
 import { requireAuth } from "../auth/csrf.js";
 import { assertCsrf } from "../auth/csrf.js";
 import { parseTorrent, rewriteAnnounce } from "../lib/bencode.js";
+import { parseDownHashUid, verifyDownHash } from "../lib/downhash.js";
 import { HttpProblem, badRequest, conflict, notFound, unauthorized } from "../lib/problem.js";
 import { loadSettings } from "../lib/settings.js";
 import { listTorrents, loadTorrentDetail, type TorrentFilters, type TorrentSort } from "../lib/torrent-query.js";
@@ -316,10 +317,32 @@ export function torrentRoutes(deps: { db: Db; config: AppConfig }): FastifyPlugi
     });
 
     app.get("/t/:id/download", async (request, reply) => {
-      const auth = request.auth;
-      if (!auth) throw unauthorized();
-
       const id = Number((request.params as { id: string }).id);
+
+      // Cookie 或短期 downhash 二选一：RSS 客户端没有 session。
+      let user = request.auth?.user ?? null;
+      if (!user) {
+        const query = request.query as { downhash?: string };
+        if (typeof query.downhash === "string") {
+          const uid = parseDownHashUid(query.downhash);
+          if (uid !== null) {
+            const candidate = await db
+              .selectFrom("users")
+              .selectAll()
+              .where("id", "=", uid)
+              .where("status", "=", "active")
+              .executeTakeFirst();
+            if (
+              candidate &&
+              verifyDownHash(config.sessionSecret, candidate.passkey, query.downhash, { uid, tid: id })
+            ) {
+              user = candidate;
+            }
+          }
+        }
+      }
+      if (!user) throw unauthorized();
+
       const row = await db
         .selectFrom("torrents")
         .select(["id", "name", "torrent_blob", "status", "deleted_at"])
@@ -337,7 +360,7 @@ export function torrentRoutes(deps: { db: Db; config: AppConfig }): FastifyPlugi
       try {
         rewritten = rewriteAnnounce(
           Buffer.from(row.torrent_blob),
-          `${config.baseUrl}/announce/${auth.user.passkey}`,
+          `${config.baseUrl}/announce/${user.passkey}`,
         );
       } catch {
         throw new HttpProblem(500, "torrent_rewrite_failed", "种子文件解析失败");
