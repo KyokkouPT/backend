@@ -26,6 +26,7 @@ import { staffAdminRoutes } from "./routes/staff-admin.js";
 import { appealRoutes } from "./routes/appeals.js";
 import { reportRoutes } from "./routes/reports.js";
 import { staffSettingsRoutes } from "./routes/staff-settings.js";
+import { setupRoutes } from "./routes/setup.js";
 
 export type AppDeps = {
   db: Db;
@@ -116,6 +117,7 @@ export function buildApp(deps: AppDeps, options: FastifyServerOptions = {}): Fas
   app.register(appealRoutes({ db: deps.db }));
   app.register(reportRoutes({ db: deps.db }));
   app.register(staffSettingsRoutes({ db: deps.db }));
+  app.register(setupRoutes(deps));
 
   return app;
 }

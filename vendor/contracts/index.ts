@@ -861,3 +861,31 @@ export const updateCategoryBody = z.object({
   name: z.string().min(1).max(64).optional(),
   display_order: z.number().int().min(0).optional(),
 });
+
+/* ============================ 首次安装向导 ============================ */
+
+export const setupStatus = z.object({
+  requires_setup: z.boolean(),
+  user_count: z.number().int(),
+  schema_version: z.number().int(),
+});
+export type SetupStatus = z.infer<typeof setupStatus>;
+
+export const setupRequest = z.object({
+  site_name: z.string().min(1).max(64),
+  site_tagline: z.string().max(160).optional(),
+  locale: z.string().min(2).max(16).default("zh-CN"),
+  admin_username: z.string().min(2).max(64),
+  admin_email: z.string().email().max(190),
+  admin_password: z.string().min(8).max(200),
+  base_sections: z.boolean().default(true),
+  registration_open: z.boolean().default(true),
+});
+export type SetupRequest = z.infer<typeof setupRequest>;
+
+export const setupResponse = z.object({
+  ok: z.literal(true),
+  user: userSummary,
+  csrf_token: z.string(),
+});
+export type SetupResponse = z.infer<typeof setupResponse>;
