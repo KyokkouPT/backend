@@ -173,7 +173,7 @@ seed 开发账号（密码由 `SEED_PASSWORD` 控制，默认 `kyokkou-dev`）�
 - 兑换支持库存/限次/幂等键；余额变更写 `bonus_ledger`，兑换写 `redemptions`。
 - RSS enclosure 使用 `uid|JWT` 形式的 downhash（HS256，key = sha256(SESSION_SECRET + passkey)），下载无需 Cookie。
 
-> **本地 Tracker 测试要直连后端**：Next rewrites 在代理二进制 query 时会破坏 `%XX` 编码，导致 `info_hash` 长度不对。本地请用 `http://127.0.0.1:31001/announce/...` 验证；生产由前端 Nginx 直接反代到后端 Nginx，不经过 Next，原始字节完整。
+> **Tracker 也走前端**：announce/scrape 由前端 `server.mjs` 在 Next 之前用原始 `req.url` 转发（保留 percent-encoding），本地经 `http://127.0.0.1:31002/announce/...` 即可验证；生产只需要一条 Nginx `location /` → 前端 31002（或直连后端 31001）。
 
 ## SMTP 邮件通知（可选）
 
