@@ -28,6 +28,7 @@
     "fastify": "^5.12.7",
     "kysely": "^0.29.7",
     "mysql2": "^3.24.6",
+    "nodemailer": "^10.2.1",
     "pg": "^8.23.1",
     "tsx": "^4.23.15",
     "zod": "^3.25.76"
@@ -35,6 +36,7 @@
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^24.19.2",
+    "@types/nodemailer": "^8.0.2",
     "@types/pg": "^8.23.1",
     "typescript": "5.9.3",
     "vitest": "^5.0.5"

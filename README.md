@@ -8,7 +8,7 @@
 - 端口：`31001`
 - 校验：zod 3
 
-> 当前进度：Phase 5 纵切（2FA + 账号设置 + Staff 审核/举报/反作弊/审计/申诉 + 站点设置/分区编辑）。健康检查、配置、三库连接、迁移（001–007）、seed、认证/CSRF、site/bootstrap/home/rules/me、目录/上传/下载、审核与通知、announce/scrape、H&R、魔力值/兑换、RSS/downhash、邀请注册、求种悬赏、排行/主页、TOTP 2FA、设置与偏好、举报/反作弊/审计/申诉、站点设置与分区编辑已实现；SMTP 实际发送、MySQL/PG 实跑与部署验证尚未完成。
+> 当前进度：Phase 5 纵切（2FA + 账号设置 + Staff 审核/举报/反作弊/审计/申诉 + 站点设置/分区编辑 + SMTP 邮件通知）。健康检查、配置、三库连接、迁移（001–007）、seed、认证/CSRF、site/bootstrap/home/rules/me、目录/上传/下载、审核与通知、announce/scrape、H&R、魔力值/兑换、RSS/downhash、邀请注册、求种悬赏、排行/主页、TOTP 2FA、设置与偏好、举报/反作弊/审计/申诉、站点设置与分区编辑、标准 SMTP 邮件通知已实现；MySQL/PG 实跑与部署验证尚未完成。
 
 ## 目录
 
@@ -26,10 +26,10 @@ backend/
 │   │   ├── migrations/     # 001_init · 002_notifications · 003_tracker · 004_economy · 005_community · 006_twofa · 007_moderation
 │   │   ├── seed.ts         # 幂等 seed
 │   │   └── check.ts        # 库检查
-│   ├── lib/                # bencode/.torrent、查询、通知、H&R、魔力、downhash、TOTP、申诉、problem+json
+│   ├── lib/                # bencode/.torrent、查询、通知、邮件、H&R、魔力、downhash、TOTP、申诉、problem+json
 │   ├── tracker/            # 原始 query 解析、内存 peer 注册表、announce 持久化
 │   └── routes/             # health / auth / site / me / torrents / staff / notifications / tracker / economy / invites / requests / top / users / settings / staff-admin / appeals / reports / staff-settings
-├── test/                   # vitest（70 条）
+├── test/                   # vitest（76 条）
 ├── vendor/contracts/       # 共享 DTO/zod（复制维护）
 ├── vendor/config/          # 站点设置 schema 与默认值
 ├── data/                   # 运行时 SQLite（git 忽略）
@@ -63,7 +63,7 @@ seed 开发账号（密码由 `SEED_PASSWORD` 控制，默认 `kyokkou-dev`）�
 | `pnpm build` | `tsc -p tsconfig.build.json` 输出到 `dist/` |
 | `pnpm start` | 用 tsx 加载器运行 `dist/server.js`（原因见下） |
 | `pnpm typecheck` | `tsc --noEmit` |
-| `pnpm test` | vitest（57 条：认证/CSRF、bootstrap/home/rules/me、目录筛选、上传审核、下载原始字节、通知、Tracker/compact/H&R、兑换/幂等/冻结、RSS/downhash、邀请注册、求种悬赏、排行/主页、迁移/seed 幂等） |
+| `pnpm test` | vitest（76 条：认证/CSRF、bootstrap/home/rules/me、目录筛选、上传审核、下载原始字节、通知、Tracker/compact/H&R、兑换/幂等/冻结、RSS/downhash、邀请注册、求种悬赏、排行/主页、迁移/seed 幂等、2FA/设置、Staff 处置/举报/申诉、站点设置/分区、SMTP 配置与邮件偏好） |
 | `pnpm migrate` | 执行未应用的迁移 |
 | `pnpm seed` | 幂等 seed |
 | `pnpm db:check` | 打印驱动、schema 版本与各表行数 |
@@ -174,6 +174,14 @@ seed 开发账号（密码由 `SEED_PASSWORD` 控制，默认 `kyokkou-dev`）�
 - RSS enclosure 使用 `uid|JWT` 形式的 downhash（HS256，key = sha256(SESSION_SECRET + passkey)），下载无需 Cookie。
 
 > **本地 Tracker 测试要直连后端**：Next rewrites 在代理二进制 query 时会破坏 `%XX` 编码，导致 `info_hash` 长度不对。本地请用 `http://127.0.0.1:31001/announce/...` 验证；生产由前端 Nginx 直接反代到后端 Nginx，不经过 Next，原始字节完整。
+
+## SMTP 邮件通知（可选）
+
+- 配置 `SMTP_HOST` + `SMTP_FROM` 即启用；`SMTP_USER`/`SMTP_PASS` 必须成对配置；`SMTP_PORT` 默认 587（`SMTP_SECURE=true` 时 465）。
+- 发送器基于 nodemailer（标准 SMTP），连接/握手超时 5s、socket 10s。
+- 站内通知始终写库；邮件按用户偏好异步发送：`kind` 映射到 `email_review` / `email_hnr` / `email_invite` / `email_social` / `email_weekly`，未列出的 kind 不发邮件；未配置 SMTP 或偏好关闭直接跳过。
+- 发送失败只写 `smtp send failed` warn 日志并返回 false，不阻塞 API；停用/封禁用户不发邮件。
+- 开发环境通常不配置 SMTP；`.env.example` 有示例配置。
 
 ## 本地无 `X-Kyou-Secret`
 

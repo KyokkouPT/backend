@@ -7,6 +7,7 @@ import type { AppConfig } from "./config.js";
 import type { Db } from "./db/db.js";
 import { createAuthHook } from "./auth/session.js";
 import { HttpProblem } from "./lib/problem.js";
+import { createMailer, setMailer } from "./lib/mailer.js";
 import { healthRoute } from "./routes/health.js";
 import { authRoutes } from "./routes/auth.js";
 import { siteRoutes } from "./routes/site.js";
@@ -47,6 +48,9 @@ function problemBody(status: number, code: string, title: string, requestId: str
  */
 export function buildApp(deps: AppDeps, options: FastifyServerOptions = {}): FastifyInstance {
   const app = Fastify({ logger: false, ...options });
+
+  // 未配置 SMTP 时 setMailer(null)：通知只写站内信，不尝试发邮件。
+  setMailer(deps.config.smtp ? createMailer(deps.config.smtp, app.log) : null);
 
   app.register(cookie);
   app.register(helmet, { contentSecurityPolicy: false });

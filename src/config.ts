@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * 环境变量校验。Phase 1 覆盖启动、数据库、会话与 seed 所需项。
+ * 环境变量校验。覆盖启动、数据库、会话、seed 与可选 SMTP。
  * 生产环境必须显式提供 SESSION_SECRET 与 SEED_PASSWORD，否则拒绝启动。
  */
 const DEV_SESSION_SECRET = "dev-only-insecure-session-secret-change-me-32";
@@ -21,9 +21,26 @@ const envSchema = z.object({
 
   SESSION_SECRET: z.string().min(32).default(DEV_SESSION_SECRET),
   SEED_PASSWORD: z.string().min(8).max(200).default(DEV_SEED_PASSWORD),
+
+  /** 标准 SMTP；全部可选，配置 SMTP_HOST + SMTP_FROM 后启用邮件。 */
+  SMTP_HOST: z.string().min(1).optional(),
+  SMTP_PORT: z.coerce.number().int().positive().max(65535).optional(),
+  SMTP_SECURE: z.enum(["true", "false", "1", "0"]).optional(),
+  SMTP_USER: z.string().min(1).optional(),
+  SMTP_PASS: z.string().min(1).optional(),
+  SMTP_FROM: z.string().email().optional(),
 });
 
 export type DatabaseDriver = z.infer<typeof envSchema>["DATABASE_DRIVER"];
+
+export type SmtpConfig = {
+  host: string;
+  port: number;
+  secure: boolean;
+  user: string | null;
+  pass: string | null;
+  from: string;
+};
 
 export type AppConfig = {
   nodeEnv: z.infer<typeof envSchema>["NODE_ENV"];
@@ -35,6 +52,7 @@ export type AppConfig = {
   baseUrl: string;
   sessionSecret: string;
   seedPassword: string;
+  smtp: SmtpConfig | null;
 };
 
 export class ConfigError extends Error {
@@ -63,6 +81,26 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     }
   }
 
+  let smtp: SmtpConfig | null = null;
+  if (data.SMTP_HOST) {
+    if (!data.SMTP_FROM) {
+      throw new ConfigError("SMTP_FROM must be set when SMTP_HOST is configured");
+    }
+    if ((data.SMTP_USER && !data.SMTP_PASS) || (!data.SMTP_USER && data.SMTP_PASS)) {
+      throw new ConfigError("SMTP_USER and SMTP_PASS must be configured together");
+    }
+
+    const secure = data.SMTP_SECURE === "true" || data.SMTP_SECURE === "1";
+    smtp = {
+      host: data.SMTP_HOST,
+      port: data.SMTP_PORT ?? (secure ? 465 : 587),
+      secure,
+      user: data.SMTP_USER ?? null,
+      pass: data.SMTP_PASS ?? null,
+      from: data.SMTP_FROM,
+    };
+  }
+
   return {
     nodeEnv: data.NODE_ENV,
     host: data.HOST,
@@ -73,5 +111,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     baseUrl: data.KYOKKOU_BASE_URL.replace(/\/+$/, ""),
     sessionSecret: data.SESSION_SECRET,
     seedPassword: data.SEED_PASSWORD,
+    smtp,
   };
 }
