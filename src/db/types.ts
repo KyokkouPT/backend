@@ -230,6 +230,45 @@ export interface RedemptionsTable {
   created_at: number;
 }
 
+export interface InvitesTable {
+  id: Generated<number>;
+  code: string;
+  inviter_id: number;
+  invited_user_id: number | null;
+  status: string;
+  note: string | null;
+  expires_at: number;
+  created_at: number;
+  used_at: number | null;
+}
+
+export interface RequestsTable {
+  id: Generated<number>;
+  user_id: number;
+  title: string;
+  description: string | null;
+  category_id: number | null;
+  bounty_bonus: number;
+  status: string;
+  created_at: number;
+  resolved_at: number | null;
+  fulfilled_by: number | null;
+}
+
+export interface UserPreferencesTable {
+  id: Generated<number>;
+  user_id: number;
+  email_review: number;
+  email_hnr: number;
+  email_invite: number;
+  email_social: number;
+  email_weekly: number;
+  public_seeding: number;
+  public_published: number;
+  searchable: number;
+  updated_at: number;
+}
+
 export interface NotificationsTable {
   id: Generated<number>;
   user_id: number;
@@ -264,4 +303,7 @@ export interface Database {
   bonus_ledger: BonusLedgerTable;
   exchange_items: ExchangeItemsTable;
   redemptions: RedemptionsTable;
+  invites: InvitesTable;
+  requests: RequestsTable;
+  user_preferences: UserPreferencesTable;
 }

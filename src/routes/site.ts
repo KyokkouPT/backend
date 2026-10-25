@@ -69,6 +69,8 @@ function buildNav(options: { loggedIn: boolean; canReview: boolean }): SiteNav {
       items: [
         { key: "home", href: "/", label: "首页", icon: "home", exact: true },
         { key: "browse", href: "/browse", label: "浏览", icon: "compass" },
+        { key: "requests", href: "/requests", label: "求种", icon: "inbox" },
+        { key: "top", href: "/top", label: "排行", icon: "trophy" },
         { key: "rules", href: "/rules", label: "规则", icon: "book-open" },
       ],
     },
@@ -82,6 +84,7 @@ function buildNav(options: { loggedIn: boolean; canReview: boolean }): SiteNav {
         { key: "me-seeding", href: "/me/seeding", label: "做种", icon: "upload" },
         { key: "me-leeching", href: "/me/leeching", label: "下载", icon: "download" },
         { key: "me-bonus", href: "/me/bonus", label: "魔力值", icon: "sparkles" },
+        { key: "me-invite", href: "/me/invite", label: "邀请", icon: "users" },
         { key: "upload", href: "/upload", label: "发布", icon: "upload" },
         { key: "rss", href: "/me/rss", label: "RSS", icon: "scroll-text" },
       ],

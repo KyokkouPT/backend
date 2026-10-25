@@ -824,6 +824,127 @@ export async function seedDatabase(db: Db, options: { password: string }): Promi
       .execute();
   }
 
+  // 社区：通知/隐私偏好、演示邀请码、演示求种
+  for (const username of ["lightbringer", "root", "阿雪"]) {
+    const userId = userIds.get(username);
+    if (userId === undefined) continue;
+    const existing = await db
+      .selectFrom("user_preferences")
+      .select("id")
+      .where("user_id", "=", userId)
+      .executeTakeFirst();
+    if (!existing) {
+      await db
+        .insertInto("user_preferences")
+        .values({
+          user_id: userId,
+          email_review: 1,
+          email_hnr: 1,
+          email_invite: 1,
+          email_social: 0,
+          email_weekly: 0,
+          public_seeding: 1,
+          public_published: 1,
+          searchable: 1,
+          updated_at: now,
+        })
+        .execute();
+    }
+  }
+
+  const demoInviteCode = "KYKDEMO1";
+  const existingInvite = await db
+    .selectFrom("invites")
+    .select("id")
+    .where("code", "=", demoInviteCode)
+    .executeTakeFirst();
+  const inviterId = userIds.get("lightbringer");
+  if (!existingInvite && inviterId !== undefined) {
+    await db
+      .insertInto("invites")
+      .values({
+        code: demoInviteCode,
+        inviter_id: inviterId,
+        invited_user_id: null,
+        status: "unused",
+        note: "seed demo invite",
+        expires_at: now + 30 * 24 * HOUR,
+        created_at: now,
+        used_at: null,
+      })
+      .execute();
+  }
+
+  const requestSeeds = [
+    {
+      username: "lightbringer",
+      title: "求 4K 原盘《沙丘 2》国配版",
+      description: "需要国语配音 + 简中字幕。",
+      bounty: 500,
+    },
+    {
+      username: "阿雪",
+      title: "求 CS61B 2024 春季课程录像",
+      description: "含讲义与作业。",
+      bounty: 500,
+    },
+  ];
+  for (const seed of requestSeeds) {
+    const userId = userIds.get(seed.username);
+    if (userId === undefined) continue;
+
+    const existing = await db
+      .selectFrom("requests")
+      .select("id")
+      .where("title", "=", seed.title)
+      .executeTakeFirst();
+    if (existing) continue;
+
+    await db.transaction().execute(async (trx) => {
+      const user = await trx
+        .selectFrom("users")
+        .select("bonus")
+        .where("id", "=", userId)
+        .executeTakeFirstOrThrow();
+      const balance = Number(user.bonus);
+      if (balance < seed.bounty) return;
+
+      const nextBalance = balance - seed.bounty;
+      await trx
+        .updateTable("users")
+        .set({ bonus: nextBalance })
+        .where("id", "=", userId)
+        .execute();
+      await trx
+        .insertInto("bonus_ledger")
+        .values({
+          user_id: userId,
+          kind: "request_escrow",
+          delta: -seed.bounty,
+          balance_after: nextBalance,
+          ref_type: "request",
+          ref_id: null,
+          note: seed.title,
+          created_at: now,
+        })
+        .execute();
+      await trx
+        .insertInto("requests")
+        .values({
+          user_id: userId,
+          title: seed.title,
+          description: seed.description,
+          category_id: null,
+          bounty_bonus: seed.bounty,
+          status: "open",
+          created_at: now,
+          resolved_at: null,
+          fulfilled_by: null,
+        })
+        .execute();
+    });
+  }
+
   // 实例元数据
   const meta = await db.selectFrom("instance_meta").selectAll().executeTakeFirst();
   let instanceId: string;

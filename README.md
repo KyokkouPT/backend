@@ -8,7 +8,7 @@
 - 端口：`31001`
 - 校验：zod 3
 
-> 当前进度：Phase 3 纵切（Tracker + H&R + 经济 + RSS）。健康检查、配置、三库连接、迁移（001–004）、seed、认证/CSRF、site/bootstrap/home/rules/me、目录/上传/下载、Staff 审核与通知、announce/scrape、H&R、魔力值与兑换、RSS/downhash 已实现；社区其余部分与 Staff 其余页面按后续纵切加入。
+> 当前进度：Phase 4 纵切（社区：邀请注册 + 求种 + 排行榜 + 用户主页）。健康检查、配置、三库连接、迁移（001–005）、seed、认证/CSRF、site/bootstrap/home/rules/me、目录/上传/下载、Staff 审核与通知、announce/scrape、H&R、魔力值与兑换、RSS/downhash、邀请码注册、求种悬赏、排行榜、公开用户主页已实现；2FA、账号设置、Staff 举报/反作弊/审计/申诉与 SMTP 在下一轮加入。
 
 ## 目录
 
@@ -21,15 +21,15 @@ backend/
 │   ├── auth/               # scrypt、session、CSRF、权限
 │   ├── db/
 │   │   ├── db.ts           # Kysely + better-sqlite3 / mysql2 / pg
-│   │   ├── types.ts        # Database 类型（迁移 001–004）
+│   │   ├── types.ts        # Database 类型（迁移 001–005）
 │   │   ├── migrate.ts      # 有序迁移执行器
-│   │   ├── migrations/     # 001_init · 002_notifications · 003_tracker · 004_economy
+│   │   ├── migrations/     # 001_init · 002_notifications · 003_tracker · 004_economy · 005_community
 │   │   ├── seed.ts         # 幂等 seed
 │   │   └── check.ts        # 库检查
 │   ├── lib/                # bencode/.torrent、查询、通知、H&R、魔力、downhash、problem+json
 │   ├── tracker/            # 原始 query 解析、内存 peer 注册表、announce 持久化
-│   └── routes/             # health / auth / site / me / torrents / staff / notifications / tracker / economy
-├── test/                   # vitest（47 条）
+│   └── routes/             # health / auth / site / me / torrents / staff / notifications / tracker / economy / invites / requests / top / users
+├── test/                   # vitest（57 条）
 ├── vendor/contracts/       # 共享 DTO/zod（复制维护）
 ├── vendor/config/          # 站点设置 schema 与默认值
 ├── data/                   # 运行时 SQLite（git 忽略）
@@ -63,7 +63,7 @@ seed 开发账号（密码由 `SEED_PASSWORD` 控制，默认 `kyokkou-dev`）�
 | `pnpm build` | `tsc -p tsconfig.build.json` 输出到 `dist/` |
 | `pnpm start` | 用 tsx 加载器运行 `dist/server.js`（原因见下） |
 | `pnpm typecheck` | `tsc --noEmit` |
-| `pnpm test` | vitest（47 条：认证/CSRF、bootstrap/home/rules/me、目录筛选、上传审核、下载原始字节、通知、Tracker/compact/H&R、兑换/幂等/冻结、RSS/downhash、迁移/seed 幂等） |
+| `pnpm test` | vitest（57 条：认证/CSRF、bootstrap/home/rules/me、目录筛选、上传审核、下载原始字节、通知、Tracker/compact/H&R、兑换/幂等/冻结、RSS/downhash、邀请注册、求种悬赏、排行/主页、迁移/seed 幂等） |
 | `pnpm migrate` | 执行未应用的迁移 |
 | `pnpm seed` | 幂等 seed |
 | `pnpm db:check` | 打印驱动、schema 版本与各表行数 |
@@ -120,6 +120,13 @@ seed 开发账号（密码由 `SEED_PASSWORD` 控制，默认 `kyokkou-dev`）�
 | GET | `/api/v1/me/ledger` | 魔力账本 |
 | POST | `/api/v1/me/exchange/:key` | 兑换；支持 `Idempotency-Key` |
 | GET | `/api/v1/me/rss` | 个人 RSS 地址 |
+| GET/POST | `/api/v1/me/invites` | 邀请码列表 / 生成（30 天、一次性、上限 5） |
+| GET | `/api/v1/invites/:code` | 邀请码公开预览 |
+| POST | `/api/v1/auth/signup` | 邀请码注册并自动登录 |
+| GET/POST | `/api/v1/requests` | 求种列表 / 发布（冻结悬赏） |
+| POST | `/api/v1/requests/:id/cancel`、`/fulfill` | 取消退款 / Staff 结算 |
+| GET | `/api/v1/top` | 用户与种子榜单 |
+| GET | `/api/v1/users/:name` | 公开用户主页（尊重隐私偏好） |
 
 错误统一为 `application/problem+json`（`type/title/status/code/request_id/fields`）。
 
@@ -174,4 +181,4 @@ pnpm 11 只从 `pnpm-workspace.yaml` 读取 build scripts 严格度设置。本�
 
 ## 路线
 
-Phase 1 → 目录与上传审核 → Tracker/H&R/经济（当前）→ 社区/Staff → 安全加固。验收标准见仓库外 `docs/16`–`docs/20`。
+Phase 1 → 目录与上传审核 → Tracker/H&R/经济 → 社区（当前）→ 2FA/设置/Staff → 安全加固。验收标准见仓库外 `docs/16`–`docs/20`。

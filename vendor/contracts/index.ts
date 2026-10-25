@@ -464,3 +464,125 @@ export type LedgerResponse = z.infer<typeof ledgerResponse>;
 
 export const rssResponse = z.object({ url: z.string() });
 export type RssResponse = z.infer<typeof rssResponse>;
+
+/* ============================ 社区 ============================ */
+
+export const inviteItem = z.object({
+  code: z.string(),
+  status: z.string(),
+  created_at: z.number(),
+  expires_at: z.number(),
+  used_at: z.number().nullable(),
+  invited_user: z.string().nullable(),
+});
+export type InviteItem = z.infer<typeof inviteItem>;
+
+export const invitesResponse = z.object({
+  items: z.array(inviteItem),
+  quota_used: z.number().int(),
+  quota_total: z.number().int(),
+});
+export type InvitesResponse = z.infer<typeof invitesResponse>;
+
+export const invitePreview = z.object({
+  valid: z.boolean(),
+  reason: z.string().nullable(),
+  inviter: z.string().nullable(),
+  expires_at: z.number().nullable(),
+});
+export type InvitePreview = z.infer<typeof invitePreview>;
+
+export const signupRequest = z.object({
+  username: z.string().min(2).max(64),
+  email: z.string().email().max(190),
+  password: z.string().min(8).max(200),
+  rules_accepted: z.literal(true),
+  invite_code: z.string().max(32).optional(),
+});
+export type SignupRequest = z.infer<typeof signupRequest>;
+
+export const requestItem = z.object({
+  id: z.number().int(),
+  user: z.object({ name: z.string(), hue: z.number().int() }),
+  title: z.string(),
+  description: z.string().nullable(),
+  category: z.object({ slug: z.string(), name: z.string() }).nullable(),
+  bounty: z.number(),
+  status: z.string(),
+  created_at: z.number(),
+  resolved_at: z.number().nullable(),
+  fulfilled_by: z.string().nullable(),
+});
+export type RequestItem = z.infer<typeof requestItem>;
+
+export const requestsResponse = z.object({ items: z.array(requestItem) });
+export type RequestsResponse = z.infer<typeof requestsResponse>;
+
+export const createRequestBody = z.object({
+  title: z.string().min(4).max(190),
+  description: z.string().max(2000).optional(),
+  category_id: z.number().int().positive().optional(),
+  bounty: z.number().int().min(0),
+});
+export type CreateRequestBody = z.infer<typeof createRequestBody>;
+
+export const fulfillRequestBody = z.object({ username: z.string().min(1).max(64) });
+export type FulfillRequestBody = z.infer<typeof fulfillRequestBody>;
+
+export const requestActionResponse = z.object({
+  ok: z.boolean(),
+  status: z.string(),
+  message: z.string(),
+});
+export type RequestActionResponse = z.infer<typeof requestActionResponse>;
+
+export const topUser = z.object({
+  rank: z.number().int(),
+  username: z.string(),
+  uploaded: z.number(),
+  downloaded: z.number(),
+  ratio: z.number().nullable(),
+  bonus: z.number(),
+  seedtime: z.number(),
+});
+export type TopUser = z.infer<typeof topUser>;
+
+export const topTorrent = z.object({
+  rank: z.number().int(),
+  id: z.number().int(),
+  name: z.string(),
+  category: z.string(),
+  seeders: z.number().int(),
+  completed: z.number().int(),
+  size: z.number(),
+});
+export type TopTorrent = z.infer<typeof topTorrent>;
+
+export const topResponse = z.object({
+  users: z.object({
+    uploaded: z.array(topUser),
+    bonus: z.array(topUser),
+    seedtime: z.array(topUser),
+  }),
+  torrents: z.object({
+    seeders: z.array(topTorrent),
+    completed: z.array(topTorrent),
+  }),
+});
+export type TopResponse = z.infer<typeof topResponse>;
+
+export const userProfile = z.object({
+  name: z.string(),
+  role: role,
+  class_key: z.string(),
+  joined_at: z.number(),
+  uploaded: z.number(),
+  downloaded: z.number(),
+  ratio: z.number().nullable(),
+  seedtime: z.number(),
+  published_count: z.number().int(),
+  seeding_count: z.number().int().nullable(),
+  published_visible: z.boolean(),
+  published: z.array(torrentSummary),
+});
+export type UserProfile = z.infer<typeof userProfile>;
