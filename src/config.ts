@@ -19,6 +19,9 @@ const envSchema = z.object({
   /** 公开前端地址，用于 announce/download/RSS 链接；不要用 BASE_URL。 */
   KYOKKOU_BASE_URL: z.string().url().default("http://localhost:31002"),
 
+  /** 可选：Tracker 的独立公开地址；未设置时与 KYOKKOU_BASE_URL 相同。 */
+  TRACKER_PUBLIC_URL: z.string().url().optional(),
+
   SESSION_SECRET: z.string().min(32).default(DEV_SESSION_SECRET),
   SEED_PASSWORD: z.string().min(8).max(200).default(DEV_SEED_PASSWORD),
 
@@ -56,6 +59,7 @@ export type AppConfig = {
   databaseDriver: DatabaseDriver;
   databaseUrl: string;
   baseUrl: string;
+  trackerBaseUrl: string;
   sessionSecret: string;
   seedPassword: string;
   cookieSecure: boolean;
@@ -117,6 +121,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     databaseDriver: data.DATABASE_DRIVER,
     databaseUrl: data.DATABASE_URL,
     baseUrl: data.KYOKKOU_BASE_URL.replace(/\/+$/, ""),
+    trackerBaseUrl: (data.TRACKER_PUBLIC_URL ?? data.KYOKKOU_BASE_URL).replace(/\/+$/, ""),
     sessionSecret: data.SESSION_SECRET,
     seedPassword: data.SEED_PASSWORD,
     cookieSecure:

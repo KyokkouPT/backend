@@ -360,7 +360,7 @@ export function torrentRoutes(deps: { db: Db; config: AppConfig }): FastifyPlugi
       try {
         rewritten = rewriteAnnounce(
           Buffer.from(row.torrent_blob),
-          `${config.baseUrl}/announce/${user.passkey}`,
+          `${config.trackerBaseUrl}/announce/${user.passkey}`,
         );
       } catch {
         throw new HttpProblem(500, "torrent_rewrite_failed", "种子文件解析失败");
