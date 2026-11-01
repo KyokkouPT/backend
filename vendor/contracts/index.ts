@@ -807,6 +807,7 @@ export const userProfile = z.object({
   raw_downloaded: z.number(),
   ratio: z.number().nullable(),
   seedtime: z.number(),
+  bonus: z.number(),
   published_count: z.number().int(),
   seeding_count: z.number().int().nullable(),
   published_visible: z.boolean(),
@@ -814,6 +815,25 @@ export const userProfile = z.object({
   published: z.array(torrentSummary),
 });
 export type UserProfile = z.infer<typeof userProfile>;
+
+export const btClientItem = z.object({
+  client_code: z.string().nullable(),
+  ipv4: z.string().nullable(),
+  ipv6: z.string().nullable(),
+  reverse_dns: z.string().nullable(),
+  features: z.enum(["4", "6", "4&6"]),
+  seeding: z.number().int(),
+  leeching: z.number().int(),
+  started_at: z.number(),
+  last_seen_at: z.number(),
+});
+export type BtClientItem = z.infer<typeof btClientItem>;
+
+export const btClientsResponse = z.object({
+  items: z.array(btClientItem),
+  hidden: z.boolean(),
+});
+export type BtClientsResponse = z.infer<typeof btClientsResponse>;
 
 /* ============================ 设置 / 2FA ============================ */
 
