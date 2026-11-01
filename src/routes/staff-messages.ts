@@ -17,7 +17,7 @@ import { badRequest, forbidden } from "../lib/problem.js";
 import { parseOrThrow } from "../lib/validate.js";
 
 const MESSAGE_KIND = "broadcast";
-const SAMPLE_SIZE = 20;
+const SAMPLE_SIZE = 6;
 const INSERT_CHUNK = 500;
 
 function requireAnnouncement(request: FastifyRequest) {
