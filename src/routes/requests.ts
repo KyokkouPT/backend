@@ -8,7 +8,6 @@ import {
 } from "@kyokkou/contracts";
 import type { Db } from "../db/db.js";
 import { assertCsrf, requireAuth } from "../auth/csrf.js";
-import { permissionsFor } from "../auth/permissions.js";
 import { createNotification } from "../lib/notifications.js";
 import { HttpProblem, badRequest, conflict, forbidden, notFound } from "../lib/problem.js";
 import { parseOrThrow } from "../lib/validate.js";
@@ -17,7 +16,7 @@ import { loadSettings } from "../lib/settings.js";
 
 function requireStaff(request: Parameters<typeof requireAuth>[0]): ReturnType<typeof requireAuth> {
   const auth = requireAuth(request);
-  if (!permissionsFor(auth.user.role).includes("staff.review")) {
+  if (!auth.permissions.includes("staff.review")) {
     throw new HttpProblem(403, "forbidden", "没有权限");
   }
   return auth;

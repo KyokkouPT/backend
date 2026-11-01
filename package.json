@@ -26,6 +26,7 @@
     "@kyokkou/config": "file:vendor/config",
     "@kyokkou/contracts": "file:vendor/contracts",
     "better-sqlite3": "^13.0.3",
+    "cron-parser": "^4.9.0",
     "fastify": "^5.12.7",
     "kysely": "^0.29.7",
     "mysql2": "^3.24.6",

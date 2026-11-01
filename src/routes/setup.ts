@@ -21,6 +21,7 @@ import {
   createSession,
 } from "../auth/session.js";
 import { HttpProblem, conflict } from "../lib/problem.js";
+import { loadClassBySlug } from "../lib/classes.js";
 import { toUserSummary } from "../lib/serialize.js";
 import { parseOrThrow } from "../lib/validate.js";
 
@@ -69,6 +70,7 @@ export function setupRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginA
         const now = Date.now();
         const passwordHash = await hashPassword(body.admin_password);
         const passkey = randomBytes(16).toString("hex");
+        const ownerClass = await loadClassBySlug(db, "owner");
 
         const settings = settingsSchema.parse({
           ...DEFAULT_SETTINGS,
@@ -94,7 +96,12 @@ export function setupRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginA
               password_hash: passwordHash,
               passkey,
               role: "admin",
-              class_key: "master",
+              class_key: ownerClass?.slug ?? "owner",
+              class_id: ownerClass ? Number(ownerClass.id) : null,
+              warnings: 0,
+              invite_balance: 0,
+              class_locked_until: null,
+              demote_due_at: null,
               status: "active",
               uploaded: 0,
               downloaded: 0,
@@ -224,7 +231,7 @@ export function setupRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginA
         return reply.status(201).send(
           setupResponse.parse({
             ok: true,
-            user: toUserSummary(user),
+            user: toUserSummary(user, ownerClass),
             csrf_token: session.csrfToken,
           }),
         );

@@ -5,6 +5,7 @@ import { hashPassword } from "../auth/password.js";
 import { createDb } from "./db.js";
 import { runMigrations } from "./migrate.js";
 import { SECTIONS } from "./seed.js";
+import { loadClassBySlug } from "../lib/classes.js";
 
 /**
  * 生产初始化：只建管理员（可选导入基础分区模板），不写任何演示数据。
@@ -41,6 +42,7 @@ async function main(): Promise<void> {
     } else {
       const now = Date.now();
       const passwordHash = await hashPassword(password);
+      const ownerClass = await loadClassBySlug(db, "owner");
       await db.transaction().execute(async (trx) => {
         await trx
           .insertInto("users")
@@ -50,7 +52,12 @@ async function main(): Promise<void> {
             password_hash: passwordHash,
             passkey: randomBytes(16).toString("hex"),
             role: "admin",
-            class_key: "master",
+            class_key: ownerClass?.slug ?? "owner",
+            class_id: ownerClass ? Number(ownerClass.id) : null,
+            warnings: 0,
+            invite_balance: 0,
+            class_locked_until: null,
+            demote_due_at: null,
             status: "active",
             uploaded: 0,
             downloaded: 0,

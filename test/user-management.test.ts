@@ -110,7 +110,7 @@ describe("staff user management", () => {
       method: "PUT",
       url: `${API_PREFIX}/staff/users/${String(self)}`,
       headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
-      payload: { role: "user" },
+      payload: { class_slug: "user" },
     });
     expect(roleChange.statusCode).toBe(400);
 

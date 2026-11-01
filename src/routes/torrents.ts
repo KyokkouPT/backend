@@ -225,7 +225,7 @@ export function torrentRoutes(deps: { db: Db; config: AppConfig }): FastifyPlugi
         .where("deleted_at", "is", null)
         .executeTakeFirst();
 
-      const trustedByRole = auth.user.role === "admin" || auth.user.role === "moderator";
+      const trustedByRole = auth.permissions.includes("torrent.auto_approve");
       const trustedByCount =
         settings.review.auto_approve_trusted &&
         numberCount(published) >= settings.review.trusted_min_approved;

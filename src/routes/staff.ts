@@ -41,7 +41,7 @@ const REVIEW_REASONS: ReviewReason[] = [
 
 function requirePermission(request: FastifyRequest, permission: string) {
   const auth = requireAuth(request);
-  if (!permissionsFor(auth.user.role).includes(permission)) {
+  if (!auth.permissions.includes(permission)) {
     throw new HttpProblem(403, "forbidden", "没有权限");
   }
   return auth;

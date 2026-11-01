@@ -1,6 +1,6 @@
 import type { Promo, TorrentSummary, UserSummary } from "@kyokkou/contracts";
 import type { Selectable } from "kysely";
-import type { UsersTable } from "../db/types.js";
+import type { ClassesTable, UsersTable } from "../db/types.js";
 
 const PROMO_VALUES = new Set<string>(["free", "2x", "50", "30", "none"]);
 
@@ -9,12 +9,32 @@ export function ratioFor(uploaded: number, downloaded: number): number | null {
   return Math.round((uploaded / downloaded) * 100) / 100;
 }
 
-export function toUserSummary(user: Selectable<UsersTable>): UserSummary {
+export function toUserSummary(
+  user: Selectable<UsersTable>,
+  classRow?: Selectable<ClassesTable> | null,
+): UserSummary {
+  const className = classRow
+    ? {
+        slug: classRow.slug,
+        name: classRow.name,
+        rank: Number(classRow.rank),
+        badge: classRow.badge,
+        color: classRow.color,
+      }
+    : {
+        slug: user.class_key,
+        name: user.class_key,
+        rank: 0,
+        badge: null,
+        color: null,
+      };
+
   return {
     id: Number(user.id),
     username: user.username,
     role: user.role,
-    class_key: user.class_key,
+    class_key: classRow?.slug ?? user.class_key,
+    class: className,
     status: user.status,
     uploaded: Number(user.uploaded),
     downloaded: Number(user.downloaded),

@@ -69,7 +69,22 @@ export function settingsRoutes(deps: { db: Db }): FastifyPluginAsync {
         email: auth.user.email,
         passkey: auth.user.passkey,
         role: auth.user.role,
-        class_key: auth.user.class_key,
+        class_key: auth.class?.slug ?? auth.user.class_key,
+        class: auth.class
+          ? {
+              slug: auth.class.slug,
+              name: auth.class.name,
+              rank: Number(auth.class.rank),
+              badge: auth.class.badge,
+              color: auth.class.color,
+            }
+          : {
+              slug: auth.user.class_key,
+              name: auth.user.class_key,
+              rank: 0,
+              badge: null,
+              color: null,
+            },
         twofa_enabled: Number(auth.user.twofa_enabled ?? 0) === 1,
       });
     });

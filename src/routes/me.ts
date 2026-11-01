@@ -74,7 +74,7 @@ export function meRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginAsyn
       const frozen = frozenUntil !== null && frozenUntil > Date.now();
 
       return meResponse.parse({
-        user: toUserSummary(auth.user),
+        user: toUserSummary(auth.user, auth.class),
         stats: {
           seeding: numberCount(seeding),
           leeching: numberCount(leeching),

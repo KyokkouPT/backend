@@ -67,7 +67,7 @@ describe("invites", () => {
     });
     const listBody = list.json() as { items: { code: string }[]; quota_total: number };
     expect(listBody.items.some((item) => item.code === body.code)).toBe(true);
-    expect(listBody.quota_total).toBe(5);
+    expect(listBody.quota_total).toBe(4);
   });
 
   it("signs up with an invite, marks it used, and notifies the inviter", async () => {

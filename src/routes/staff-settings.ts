@@ -15,14 +15,14 @@ import {
 } from "@kyokkou/contracts";
 import type { Db } from "../db/db.js";
 import { assertCsrf, requireAuth } from "../auth/csrf.js";
-import { permissionsFor } from "../auth/permissions.js";
 import { HttpProblem, conflict, notFound } from "../lib/problem.js";
+import { nextRunAt, reloadClassScheduler } from "../lib/class-scheduler.js";
 import { loadSettings } from "../lib/settings.js";
 import { parseOrThrow } from "../lib/validate.js";
 
 function requireSettings(request: Parameters<typeof requireAuth>[0]) {
   const auth = requireAuth(request);
-  if (!permissionsFor(auth.user.role).includes(PERMISSIONS.staffSettings)) {
+  if (!auth.permissions.includes(PERMISSIONS.staffSettings)) {
     throw new HttpProblem(403, "forbidden", "没有权限");
   }
   return auth;
@@ -58,7 +58,18 @@ export function staffSettingsRoutes(deps: { db: Db }): FastifyPluginAsync {
 
     app.get(`${API_PREFIX}/staff/settings`, async (request) => {
       requireSettings(request);
-      return staffSettingsResponse.parse({ settings: await loadSettings(db) });
+      const settings = await loadSettings(db);
+      return staffSettingsResponse.parse({
+        settings: {
+          ...settings,
+          classes: {
+            ...settings.classes,
+            next_run_at: settings.classes.recalc_enabled
+              ? nextRunAt(settings.classes.recalc_cron)
+              : null,
+          },
+        },
+      });
     });
 
     app.put(`${API_PREFIX}/staff/settings`, async (request) => {
@@ -73,11 +84,20 @@ export function staffSettingsRoutes(deps: { db: Db }): FastifyPluginAsync {
         tracker: { ...current.tracker, ...(body.tracker ?? {}) },
         economy: { ...current.economy, ...(body.economy ?? {}) },
         review: { ...current.review, ...(body.review ?? {}) },
+        classes: { ...current.classes, ...(body.classes ?? {}) },
       };
       const validated = settingsSchema.parse(merged);
 
       for (const key of SETTING_KEYS) {
         if (body[key] !== undefined) await saveSetting(db, key, validated[key]);
+      }
+
+      if (body.classes !== undefined) {
+        const checked = nextRunAt(validated.classes.recalc_cron);
+        if (checked === null) {
+          throw new HttpProblem(400, "invalid_cron", "cron 表达式无效或间隔小于 5 分钟");
+        }
+        await reloadClassScheduler(db);
       }
 
       await db

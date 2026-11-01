@@ -2,7 +2,8 @@ import { createHash, randomBytes } from "node:crypto";
 import type { FastifyRequest } from "fastify";
 import type { Selectable } from "kysely";
 import type { Db } from "../db/db.js";
-import type { SessionsTable, UsersTable } from "../db/types.js";
+import type { ClassesTable, SessionsTable, UsersTable } from "../db/types.js";
+import { computePermissions, loadClassById, loadClassBySlug, loadOverrides } from "../lib/classes.js";
 
 export const SESSION_COOKIE = "kp_session";
 export const CSRF_COOKIE = "kp_csrf";
@@ -10,10 +11,13 @@ export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 export type SessionRow = Selectable<SessionsTable>;
 export type UserRow = Selectable<UsersTable>;
+export type ClassRow = Selectable<ClassesTable>;
 
 export type AuthContext = {
   session: SessionRow;
   user: UserRow;
+  class: ClassRow | null;
+  permissions: string[];
 };
 
 declare module "fastify" {
@@ -83,7 +87,14 @@ export async function resolveSessionByToken(db: Db, token: string): Promise<Auth
     return null;
   }
 
-  return { session, user };
+  const classRow =
+    user.class_id === null
+      ? await loadClassBySlug(db, "user")
+      : await loadClassById(db, Number(user.class_id));
+  const overrides = await loadOverrides(db, Number(user.id));
+  const permissions = computePermissions(classRow, overrides);
+
+  return { session, user, class: classRow, permissions };
 }
 
 export async function deleteSession(db: Db, sessionId: number): Promise<void> {

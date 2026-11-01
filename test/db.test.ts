@@ -35,6 +35,7 @@ describe("migrations", () => {
         { version: 5, name: "community" },
         { version: 6, name: "twofa" },
         { version: 7, name: "moderation" },
+        { version: 8, name: "classes" },
       ]);
 
       const users = await db.selectFrom("users").selectAll().execute();

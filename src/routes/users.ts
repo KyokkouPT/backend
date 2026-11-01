@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { API_PREFIX, userProfile } from "@kyokkou/contracts";
 import type { Db } from "../db/db.js";
+import { classBriefOf, loadClassById } from "../lib/classes.js";
 import { notFound } from "../lib/problem.js";
 import { numberCount, ratioFor } from "../lib/serialize.js";
 import { listTorrents } from "../lib/torrent-query.js";
@@ -63,10 +64,14 @@ export function userRoutes(deps: { db: Db }): FastifyPluginAsync {
           ).items
         : [];
 
+      const classRow =
+        user.class_id === null ? null : await loadClassById(db, Number(user.class_id));
+
       return userProfile.parse({
         name: user.username,
         role: user.role,
-        class_key: user.class_key,
+        class_key: classRow?.slug ?? user.class_key,
+        class: classBriefOf(classRow, user.class_key, user.class_key),
         joined_at: Number(user.created_at),
         uploaded: Number(user.uploaded),
         downloaded: Number(user.downloaded),

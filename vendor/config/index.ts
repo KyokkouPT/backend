@@ -40,7 +40,12 @@ export const reviewSettings = z.object({
   pending_alert_hours: z.number().int().min(1),
 });
 
-export const SETTING_KEYS = ["site", "registration", "tracker", "economy", "review"] as const;
+export const classesSettings = z.object({
+  recalc_enabled: z.boolean(),
+  recalc_cron: z.string().min(5).max(64),
+});
+
+export const SETTING_KEYS = ["site", "registration", "tracker", "economy", "review", "classes"] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
 export const settingsSchema = z.object({
@@ -49,6 +54,7 @@ export const settingsSchema = z.object({
   tracker: trackerSettings,
   economy: economySettings,
   review: reviewSettings,
+  classes: classesSettings,
 });
 
 export type SiteSettings = z.infer<typeof siteSettings>;
@@ -56,6 +62,7 @@ export type RegistrationSettings = z.infer<typeof registrationSettings>;
 export type TrackerSettings = z.infer<typeof trackerSettings>;
 export type EconomySettings = z.infer<typeof economySettings>;
 export type ReviewSettings = z.infer<typeof reviewSettings>;
+export type ClassesSettings = z.infer<typeof classesSettings>;
 export type Settings = z.infer<typeof settingsSchema>;
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -86,5 +93,9 @@ export const DEFAULT_SETTINGS: Settings = {
     auto_approve_trusted: true,
     trusted_min_approved: 5,
     pending_alert_hours: 24,
+  },
+  classes: {
+    recalc_enabled: true,
+    recalc_cron: "*/15 * * * *",
   },
 };

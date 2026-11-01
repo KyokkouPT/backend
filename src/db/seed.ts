@@ -4,6 +4,7 @@ import type { SectionField } from "@kyokkou/contracts";
 import { hashPassword } from "../auth/password.js";
 import type { Db } from "./db.js";
 import { LATEST_SCHEMA_VERSION } from "./migrations/index.js";
+import { ROLE_CLASS_MAP } from "../lib/class-defaults.js";
 
 /**
  * 开发/首次初始化 seed。幂等：按唯一键查重，已存在则跳过
@@ -495,10 +496,14 @@ export async function seedDatabase(db: Db, options: { password: string }): Promi
   }
 
   // 用户
+  const classRows = await db.selectFrom("classes").select(["id", "slug", "invite_quota"]).execute();
+  const classBySlug = new Map(classRows.map((row) => [row.slug, row]));
   const userIds = new Map<string, number>();
   for (const user of USERS) {
     const existing = await findId(db, "users", "username", user.username);
     if (existing === null) {
+      const classSlug = ROLE_CLASS_MAP[user.role] ?? "user";
+      const classRow = classBySlug.get(classSlug) ?? classBySlug.get("user");
       await db
         .insertInto("users")
         .values({
@@ -507,7 +512,12 @@ export async function seedDatabase(db: Db, options: { password: string }): Promi
           password_hash: await hashPassword(options.password),
           passkey: randomBytes(16).toString("hex"),
           role: user.role,
-          class_key: user.classKey,
+          class_key: classRow?.slug ?? user.classKey,
+          class_id: classRow ? Number(classRow.id) : null,
+          warnings: 0,
+          invite_balance: classRow?.invite_quota ?? 0,
+          class_locked_until: null,
+          demote_due_at: null,
           status: "active",
           uploaded: user.uploaded,
           downloaded: user.downloaded,

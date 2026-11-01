@@ -12,7 +12,7 @@ import type { AppConfig } from "../config.js";
 import type { Db } from "../db/db.js";
 import { assertCsrf } from "../auth/csrf.js";
 import { hashPassword, runDummyKdf, verifyPassword } from "../auth/password.js";
-import { permissionsFor } from "../auth/permissions.js";
+import { loadClassById, loadClassBySlug } from "../lib/classes.js";
 import {
   CSRF_COOKIE,
   SESSION_COOKIE,
@@ -123,8 +123,13 @@ export function authRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginAs
         reply.setCookie(SESSION_COOKIE, session.token, { ...cookieBase, httpOnly: true });
         reply.setCookie(CSRF_COOKIE, session.csrfToken, { ...cookieBase, httpOnly: false });
 
+        const classRow =
+          user.class_id === null
+            ? await loadClassBySlug(db, "user")
+            : await loadClassById(db, Number(user.class_id));
+
         return loginResponse.parse({
-          user: toUserSummary(user),
+          user: toUserSummary(user, classRow),
           csrf_token: session.csrfToken,
         });
       },
@@ -172,6 +177,7 @@ export function authRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginAs
         const now = Date.now();
         const passwordHash = await hashPassword(body.password);
         const passkey = randomBytes(16).toString("hex");
+        const defaultClass = await loadClassBySlug(db, "user");
 
         await db.transaction().execute(async (trx) => {
           if (inviteCode.length > 0) {
@@ -195,6 +201,11 @@ export function authRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginAs
               passkey,
               role: "user",
               class_key: "user",
+              class_id: defaultClass ? Number(defaultClass.id) : null,
+              warnings: 0,
+              invite_balance: defaultClass?.invite_quota ?? 0,
+              class_locked_until: null,
+              demote_due_at: null,
               status: "active",
               uploaded: 0,
               downloaded: 0,
@@ -269,7 +280,7 @@ export function authRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginAs
 
         return reply.status(201).send(
           loginResponse.parse({
-            user: toUserSummary(user),
+            user: toUserSummary(user, defaultClass),
             csrf_token: session.csrfToken,
           }),
         );
@@ -300,8 +311,8 @@ export function authRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginAs
         .executeTakeFirst();
 
       return authMeResponse.parse({
-        user: toUserSummary(auth.user),
-        permissions: permissionsFor(auth.user.role),
+        user: toUserSummary(auth.user, auth.class),
+        permissions: auth.permissions,
         unread_count: await unreadNotificationCount(db, Number(auth.user.id)),
         todo: { pending_review: numberCount(pending) },
       });

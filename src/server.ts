@@ -3,6 +3,7 @@ import { ConfigError, loadConfig } from "./config.js";
 import { createDb } from "./db/db.js";
 import { currentSchemaVersion, runMigrations } from "./db/migrate.js";
 import { settleHnr } from "./lib/hnr.js";
+import { initClassScheduler, stopClassScheduler } from "./lib/class-scheduler.js";
 import { prunePeers } from "./tracker/registry.js";
 
 const PEER_TTL_MS = 60 * 60 * 1000;
@@ -39,6 +40,7 @@ async function main(): Promise<void> {
 
   const shutdown = async (signal: string): Promise<void> => {
     app.log.info({ signal }, "shutting down");
+    stopClassScheduler();
     await app.close();
     await db.destroy();
     process.exit(0);
@@ -79,6 +81,9 @@ async function main(): Promise<void> {
     if (removed > 0) app.log.debug({ removed }, "pruned stale peers");
   }, MAINTENANCE_INTERVAL_MS);
   peerTimer.unref();
+
+  // 等级重算调度：cron 来自站点设置，可热重载。
+  initClassScheduler(db, app.log);
 }
 
 void main();

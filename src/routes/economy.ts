@@ -246,7 +246,7 @@ export function economyRoutes(deps: { db: Db; config: AppConfig }): FastifyPlugi
       await db.transaction().execute(async (trx) => {
         const current = await trx
           .selectFrom("users")
-          .select(["bonus", "uploaded"])
+          .select(["bonus", "uploaded", "invite_balance"])
           .where("id", "=", Number(auth.user.id))
           .executeTakeFirstOrThrow();
 
@@ -258,10 +258,12 @@ export function economyRoutes(deps: { db: Db; config: AppConfig }): FastifyPlugi
           payload.type === "upload" && typeof payload.amount === "number"
             ? Number(current.uploaded) + Math.floor(payload.amount)
             : Number(current.uploaded);
+        const nextInviteBalance =
+          payload.type === "invite" ? Number(current.invite_balance) + 1 : Number(current.invite_balance);
 
         await trx
           .updateTable("users")
-          .set({ bonus: nextBalance, uploaded: nextUploaded })
+          .set({ bonus: nextBalance, uploaded: nextUploaded, invite_balance: nextInviteBalance })
           .where("id", "=", Number(auth.user.id))
           .execute();
 

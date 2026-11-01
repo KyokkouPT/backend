@@ -63,6 +63,79 @@ export interface UsersTable {
   last_bonus_at: number | null;
   twofa_secret: string | null;
   twofa_enabled: number | null;
+  /** 等级；迁移 008 回填，应用层保证有值。 */
+  class_id: number | null;
+  warnings: number;
+  invite_balance: number;
+  class_locked_until: number | null;
+  demote_due_at: number | null;
+}
+
+export interface ClassesTable {
+  id: Generated<number>;
+  slug: string;
+  name: string;
+  rank: number;
+  badge: string | null;
+  color: string | null;
+  description: string;
+  permissions_json: string;
+  invite_quota: number;
+  auto_approve_quota: number;
+  promote_rule_json: string | null;
+  demote_rule_json: string | null;
+  demote_target_slug: string | null;
+  promote_grace_days: number;
+  demote_grace_days: number;
+  lock_manual: number;
+  manual_grantable: number;
+  visible: number;
+  exempt_hr: number;
+  exempt_ratio_matrix: number;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface UserPermissionOverridesTable {
+  id: Generated<number>;
+  user_id: number;
+  permission: string;
+  effect: "grant" | "deny";
+  expires_at: number | null;
+  actor_id: number | null;
+  created_at: number;
+}
+
+export interface UserClassHistoryTable {
+  id: Generated<number>;
+  user_id: number;
+  from_class_id: number | null;
+  to_class_id: number;
+  source: "auto" | "manual" | "system";
+  reason: string;
+  detail_json: string | null;
+  actor_id: number | null;
+  created_at: number;
+}
+
+export interface ClassRecalcRunsTable {
+  id: Generated<number>;
+  started_at: number;
+  finished_at: number | null;
+  scanned: number;
+  promoted: number;
+  demoted: number;
+  error: string | null;
+  triggered_by: "cron" | "manual";
+  actor_id: number | null;
+}
+
+export interface UserClassProgressTable {
+  id: Generated<number>;
+  user_id: number;
+  target_class_id: number;
+  first_met_at: number;
+  last_checked_at: number;
 }
 
 export interface SessionsTable {
@@ -368,4 +441,9 @@ export interface Database {
   anomalies: AnomaliesTable;
   appeals: AppealsTable;
   appeal_messages: AppealMessagesTable;
+  classes: ClassesTable;
+  user_permission_overrides: UserPermissionOverridesTable;
+  user_class_history: UserClassHistoryTable;
+  class_recalc_runs: ClassRecalcRunsTable;
+  user_class_progress: UserClassProgressTable;
 }

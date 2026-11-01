@@ -6,7 +6,6 @@ import { assertCsrf, requireAuth } from "../auth/csrf.js";
 import { conflict } from "../lib/problem.js";
 
 const INVITE_TTL_MS = 30 * 86_400_000;
-const INVITE_QUOTA = 5;
 
 function newInviteCode(): string {
   return randomBytes(6).toString("hex").toUpperCase();
@@ -34,9 +33,12 @@ export function inviteRoutes(deps: { db: Db }): FastifyPluginAsync {
         .limit(50)
         .execute();
 
-      const used = rows.filter(
-        (row) => row.status === "unused" && Number(row.expires_at) > Date.now(),
-      ).length;
+      const used = rows.filter((row) => row.status === "used").length;
+      const userRow = await db
+        .selectFrom("users")
+        .select("invite_balance")
+        .where("id", "=", Number(auth.user.id))
+        .executeTakeFirstOrThrow();
 
       return invitesResponse.parse({
         items: rows.map((row) => ({
@@ -48,7 +50,7 @@ export function inviteRoutes(deps: { db: Db }): FastifyPluginAsync {
           invited_user: row.invited_user,
         })),
         quota_used: used,
-        quota_total: INVITE_QUOTA,
+        quota_total: Number(userRow.invite_balance),
       });
     });
 
@@ -56,32 +58,32 @@ export function inviteRoutes(deps: { db: Db }): FastifyPluginAsync {
       const auth = requireAuth(request);
       assertCsrf(request, auth.session);
 
-      const rows = await db
-        .selectFrom("invites")
-        .select("id")
-        .where("inviter_id", "=", Number(auth.user.id))
-        .where("status", "=", "unused")
-        .where("expires_at", ">", Date.now())
-        .execute();
-      if (rows.length >= INVITE_QUOTA) {
-        throw conflict("invite_quota_exhausted", "未使用的邀请码已达上限");
-      }
-
       const now = Date.now();
       const code = newInviteCode();
-      await db
-        .insertInto("invites")
-        .values({
-          code,
-          inviter_id: Number(auth.user.id),
-          invited_user_id: null,
-          status: "unused",
-          note: null,
-          expires_at: now + INVITE_TTL_MS,
-          created_at: now,
-          used_at: null,
-        })
-        .execute();
+      await db.transaction().execute(async (trx) => {
+        const updated = await trx
+          .updateTable("users")
+          .set((eb) => ({ invite_balance: eb("invite_balance", "-", 1) }))
+          .where("id", "=", Number(auth.user.id))
+          .where("invite_balance", ">", 0)
+          .execute();
+        if (Number(updated[0]?.numUpdatedRows ?? 0) === 0) {
+          throw conflict("invite_quota_exhausted", "邀请余额不足");
+        }
+        await trx
+          .insertInto("invites")
+          .values({
+            code,
+            inviter_id: Number(auth.user.id),
+            invited_user_id: null,
+            status: "unused",
+            note: null,
+            expires_at: now + INVITE_TTL_MS,
+            created_at: now,
+            used_at: null,
+          })
+          .execute();
+      });
 
       return reply.status(201).send(
         inviteItem.parse({

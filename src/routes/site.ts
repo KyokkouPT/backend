@@ -21,7 +21,6 @@ import { PERMISSIONS } from "@kyokkou/contracts";
 import type { AppConfig } from "../config.js";
 import { APP_VERSION } from "../version.js";
 import type { Db } from "../db/db.js";
-import { permissionsFor } from "../auth/permissions.js";
 import { unreadNotificationCount } from "../lib/notifications.js";
 import { loadSettings } from "../lib/settings.js";
 import { numberCount, toTorrentSummary, toUserSummary, type TorrentJoinRow } from "../lib/serialize.js";
@@ -379,7 +378,7 @@ export function siteRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginAs
 
     app.get(`${API_PREFIX}/bootstrap`, async (request) => {
       const auth = request.auth;
-      const permissions = auth ? permissionsFor(auth.user.role) : [];
+      const permissions = auth ? auth.permissions : [];
       const [settings, sections, counts] = await Promise.all([
         loadSettings(db),
         loadSections(db),
@@ -395,7 +394,7 @@ export function siteRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginAs
         sections,
         permissions,
         counts,
-        me: auth ? toUserSummary(auth.user) : null,
+        me: auth ? toUserSummary(auth.user, auth.class) : null,
         config_version: "1",
       });
     });

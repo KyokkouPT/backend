@@ -22,7 +22,7 @@ import type { Db } from "../db/db.js";
 import { currentSchemaVersion } from "../db/migrate.js";
 import { assertCsrf, requireAuth } from "../auth/csrf.js";
 import { hashPassword } from "../auth/password.js";
-import { permissionsFor } from "../auth/permissions.js";
+import { classBriefOf, isAutoDemote, loadClassById, loadClassBySlug } from "../lib/classes.js";
 import { deleteAllSessionsOfUser } from "../auth/session.js";
 import { loadAppeals } from "../lib/appeals.js";
 import { createNotification } from "../lib/notifications.js";
@@ -32,10 +32,18 @@ import { parseOrThrow } from "../lib/validate.js";
 
 function requirePerm(request: FastifyRequest, permission: string) {
   const auth = requireAuth(request);
-  if (!permissionsFor(auth.user.role).includes(permission)) {
+  if (!auth.permissions.includes(permission)) {
     throw new HttpProblem(403, "forbidden", "没有权限");
   }
   return auth;
+}
+
+/** 操作者只能授予/调整 rank 严格低于自己的等级。 */
+function assertRankBelowOperator(auth: ReturnType<typeof requirePerm>, targetRank: number): void {
+  const operatorRank = auth.class ? Number(auth.class.rank) : 0;
+  if (targetRank >= operatorRank) {
+    throw new HttpProblem(403, "rank_too_high", "只能操作等级低于自己的用户等级");
+  }
 }
 
 async function countWhere(db: Db, table: "torrents" | "reports" | "anomalies" | "users", column: string, value: string) {
@@ -88,22 +96,30 @@ export function staffAdminRoutes(deps: { db: Db }): FastifyPluginAsync {
         );
       }
       const rows = await builder.orderBy("id", "asc").limit(50).execute();
+      const classRows = await db.selectFrom("classes").selectAll().execute();
+      const classById = new Map(classRows.map((row) => [Number(row.id), row]));
 
       return staffUsersResponse.parse({
-        items: rows.map((user) => ({
-          id: Number(user.id),
-          username: user.username,
-          email: user.email,
-          role: user.role,
-          class_key: user.class_key,
-          status: user.status,
-          uploaded: Number(user.uploaded),
-          downloaded: Number(user.downloaded),
-          ratio: ratioFor(Number(user.uploaded), Number(user.downloaded)),
-          bonus: Number(user.bonus),
-          created_at: Number(user.created_at),
-          last_seen_at: user.last_seen_at === null ? null : Number(user.last_seen_at),
-        })),
+        items: rows.map((user) => {
+          const classRow =
+            user.class_id === null ? null : (classById.get(Number(user.class_id)) ?? null);
+          return {
+            id: Number(user.id),
+            username: user.username,
+            email: user.email,
+            role: user.role,
+            class_key: classRow?.slug ?? user.class_key,
+            class: classBriefOf(classRow, user.class_key, user.class_key),
+            warnings: Number(user.warnings ?? 0),
+            status: user.status,
+            uploaded: Number(user.uploaded),
+            downloaded: Number(user.downloaded),
+            ratio: ratioFor(Number(user.uploaded), Number(user.downloaded)),
+            bonus: Number(user.bonus),
+            created_at: Number(user.created_at),
+            last_seen_at: user.last_seen_at === null ? null : Number(user.last_seen_at),
+          };
+        }),
       });
     });
 
@@ -121,6 +137,11 @@ export function staffAdminRoutes(deps: { db: Db }): FastifyPluginAsync {
         .executeTakeFirst();
       if (existing) throw conflict("account_exists", "用户名或邮箱已被使用");
 
+      const classSlug = body.class_slug?.trim() || body.class_key?.trim() || "user";
+      const targetClass = await loadClassBySlug(db, classSlug);
+      if (!targetClass) throw badRequest("class_not_found", "等级不存在");
+      assertRankBelowOperator(auth, Number(targetClass.rank));
+
       const now = Date.now();
       const passwordHash = await hashPassword(body.password);
       const passkey = randomBytes(16).toString("hex");
@@ -133,8 +154,13 @@ export function staffAdminRoutes(deps: { db: Db }): FastifyPluginAsync {
             email,
             password_hash: passwordHash,
             passkey,
-            role: body.role,
-            class_key: body.class_key,
+            role: body.role ?? "user",
+            class_key: targetClass.slug,
+            class_id: Number(targetClass.id),
+            warnings: 0,
+            invite_balance: Number(targetClass.invite_quota),
+            class_locked_until: null,
+            demote_due_at: null,
             status: "active",
             uploaded: 0,
             downloaded: 0,
@@ -177,7 +203,7 @@ export function staffAdminRoutes(deps: { db: Db }): FastifyPluginAsync {
             action: "user.create",
             target_type: "user",
             target_id: String(created.id),
-            detail_json: JSON.stringify({ role: body.role }),
+            detail_json: JSON.stringify({ class: targetClass.slug }),
             ip: request.ip,
             created_at: now,
           })
@@ -211,6 +237,25 @@ export function staffAdminRoutes(deps: { db: Db }): FastifyPluginAsync {
       }
 
       const patch: Record<string, unknown> = {};
+      let newClass: Awaited<ReturnType<typeof loadClassBySlug>> = null;
+      const classSlug = body.class_slug?.trim() || body.class_key?.trim();
+      if (classSlug) {
+        newClass = await loadClassBySlug(db, classSlug);
+        if (!newClass) throw badRequest("class_not_found", "等级不存在");
+        if (self) throw badRequest("self_class", "不能修改自己的等级");
+        if (Number(newClass.manual_grantable) === 0) {
+          throw badRequest("class_not_grantable", "该等级不允许手动授予");
+        }
+        assertRankBelowOperator(auth, Number(newClass.rank));
+        const currentClass =
+          target.class_id === null ? null : await loadClassById(db, Number(target.class_id));
+        const currentRank = currentClass ? Number(currentClass.rank) : 0;
+        if (Number(newClass.rank) < currentRank && (isAutoDemote(newClass) || newClass.permissions_json.includes("class.auto_promote"))) {
+          throw badRequest("auto_class_demote", "自动等级不能手动降级，请等待自动重算");
+        }
+        patch.class_id = Number(newClass.id);
+        patch.class_key = newClass.slug;
+      }
       if (body.email) {
         const email = body.email.trim().toLowerCase();
         const exists = await db
@@ -222,10 +267,12 @@ export function staffAdminRoutes(deps: { db: Db }): FastifyPluginAsync {
         if (exists) throw conflict("email_taken", "邮箱已被使用");
         patch.email = email;
       }
-      if (body.role) patch.role = body.role;
-      if (body.class_key) patch.class_key = body.class_key;
       if (body.status) patch.status = body.status;
       if (body.password) patch.password_hash = await hashPassword(body.password);
+
+      if (Object.keys(patch).length === 0) {
+        throw badRequest("nothing_to_update", "没有需要修改的内容");
+      }
 
       const now = Date.now();
       await db.transaction().execute(async (trx) => {
@@ -259,6 +306,16 @@ export function staffAdminRoutes(deps: { db: Db }): FastifyPluginAsync {
                 ? "你的账号已被停用。"
                 : "你的账号已被封禁。",
           linkUrl: "/appeals",
+        });
+      }
+
+      if (newClass && Number(newClass.id) !== Number(target.class_id ?? -1)) {
+        await createNotification(db, {
+          userId: id,
+          kind: "account",
+          title: "等级变更",
+          body: `你的等级已调整为「${newClass.name}」。`,
+          linkUrl: "/me",
         });
       }
 
@@ -335,7 +392,14 @@ export function staffAdminRoutes(deps: { db: Db }): FastifyPluginAsync {
       const nextStatus =
         action === "suspend" ? "suspended" : action === "ban" ? "banned" : action === "restore" ? "active" : target.status;
 
-      await db.updateTable("users").set({ status: nextStatus }).where("id", "=", id).execute();
+      await db
+        .updateTable("users")
+        .set({
+          status: nextStatus,
+          ...(action === "warn" ? { warnings: Number(target.warnings ?? 0) + 1 } : {}),
+        })
+        .where("id", "=", id)
+        .execute();
       if (action === "suspend" || action === "ban") {
         await deleteAllSessionsOfUser(db, id);
       }

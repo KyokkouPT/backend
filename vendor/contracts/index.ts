@@ -45,15 +45,25 @@ export type UserStatus = z.infer<typeof userStatus>;
 
 /** 权限 key 常量；后续纵切按需追加，不在前端硬编码字符串。 */
 export const PERMISSIONS = {
+  staffAvailable: "staff.available",
   staffAccess: "staff.access",
   staffReview: "staff.review",
   staffReports: "staff.reports",
   staffUsers: "staff.users",
+  staffUserClass: "staff.user_class",
   staffAnomalies: "staff.anomalies",
   staffAudit: "staff.audit",
   staffSettings: "staff.settings",
-  staffSections: "staff.sections",
+  staffClasses: "staff.classes",
   staffAppeals: "staff.appeals",
+  staffAnnouncement: "staff.announcement",
+  staffUserEdit: "staff.user_edit",
+  staffUserWarn: "staff.user_warn",
+  staffUserStatus: "staff.user_status",
+  staffInviteView: "staff.invite_view",
+  staffIpView: "staff.ip_view",
+  classAutoPromote: "class.auto_promote",
+  classAutoDemote: "class.auto_demote",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -156,11 +166,22 @@ export type Section = z.infer<typeof section>;
 
 /* ============================ 用户 ============================ */
 
+/** 等级的最小展示信息；用于用户摘要、Staff 列表与模拟器。 */
+export const classBrief = z.object({
+  slug: z.string(),
+  name: z.string(),
+  rank: z.number().int(),
+  badge: z.string().nullable(),
+  color: z.string().nullable(),
+});
+export type ClassBrief = z.infer<typeof classBrief>;
+
 export const userSummary = z.object({
   id: z.number().int(),
   username: z.string(),
   role: role,
   class_key: z.string(),
+  class: classBrief,
   status: userStatus,
   uploaded: z.number(),
   downloaded: z.number(),
@@ -575,6 +596,7 @@ export const userProfile = z.object({
   name: z.string(),
   role: role,
   class_key: z.string(),
+  class: classBrief,
   joined_at: z.number(),
   uploaded: z.number(),
   downloaded: z.number(),
@@ -595,6 +617,7 @@ export const meSettingsResponse = z.object({
   passkey: z.string(),
   role,
   class_key: z.string(),
+  class: classBrief,
   twofa_enabled: z.boolean(),
 });
 export type MeSettingsResponse = z.infer<typeof meSettingsResponse>;
@@ -650,6 +673,8 @@ export const staffUserItem = z.object({
   email: z.string(),
   role,
   class_key: z.string(),
+  class: classBrief,
+  warnings: z.number().int(),
   status: userStatus,
   uploaded: z.number(),
   downloaded: z.number(),
@@ -813,6 +838,11 @@ export const staffSettings = z.object({
     trusted_min_approved: z.number().int().min(0),
     pending_alert_hours: z.number().int().min(1),
   }),
+  classes: z.object({
+    recalc_enabled: z.boolean(),
+    recalc_cron: z.string().min(5).max(64),
+    next_run_at: z.number().nullable().optional(),
+  }),
 });
 export type StaffSettings = z.infer<typeof staffSettings>;
 
@@ -825,6 +855,7 @@ export const updateStaffSettingsBody = z.object({
   tracker: staffSettings.shape.tracker.partial().optional(),
   economy: staffSettings.shape.economy.partial().optional(),
   review: staffSettings.shape.review.partial().optional(),
+  classes: staffSettings.shape.classes.omit({ next_run_at: true }).partial().optional(),
 });
 export type UpdateStaffSettingsBody = z.infer<typeof updateStaffSettingsBody>;
 
@@ -921,16 +952,167 @@ export const staffCreateUserBody = z.object({
   username: z.string().min(2).max(64),
   email: z.string().email().max(190),
   password: z.string().min(8).max(200),
-  role: role.default("user"),
-  class_key: z.string().min(1).max(32).default("user"),
+  class_slug: z.string().min(1).max(32).default("user"),
+  /** @deprecated 兼容旧客户端；优先使用 class_slug。 */
+  role: role.optional(),
+  /** @deprecated 兼容旧客户端；优先使用 class_slug。 */
+  class_key: z.string().min(1).max(32).optional(),
 });
 export type StaffCreateUserBody = z.infer<typeof staffCreateUserBody>;
 
 export const staffUpdateUserBody = z.object({
   email: z.string().email().max(190).optional(),
-  role: role.optional(),
-  class_key: z.string().min(1).max(32).optional(),
+  class_slug: z.string().min(1).max(32).optional(),
   status: userStatus.optional(),
   password: z.string().min(8).max(200).optional(),
+  /** @deprecated 兼容旧客户端；优先使用 class_slug。 */
+  role: role.optional(),
+  /** @deprecated 兼容旧客户端；优先使用 class_slug。 */
+  class_key: z.string().min(1).max(32).optional(),
 });
 export type StaffUpdateUserBody = z.infer<typeof staffUpdateUserBody>;
+
+
+/* ============================ 等级 / 权限节点 ============================ */
+
+export const classCondition = z.object({
+  metric: z.string().min(1).max(32),
+  op: z.enum([">=", ">", "<=", "<", "==", "!="]),
+  value: z.number(),
+  unit: z.enum(["B", "KB", "MB", "GB", "TB"]).optional(),
+});
+export type ClassCondition = z.infer<typeof classCondition>;
+
+export const classRule = z.object({
+  logic: z.enum(["all", "any"]),
+  conditions: z.array(classCondition).max(30),
+});
+export type ClassRule = z.infer<typeof classRule>;
+
+export const classItem = z.object({
+  id: z.number().int(),
+  slug: z.string(),
+  name: z.string(),
+  rank: z.number().int(),
+  badge: z.string().nullable(),
+  color: z.string().nullable(),
+  description: z.string(),
+  permissions: z.array(z.string()),
+  invite_quota: z.number().int(),
+  auto_approve_quota: z.number().int(),
+  promote_rule: classRule.nullable(),
+  demote_rule: classRule.nullable(),
+  promote_grace_days: z.number().int(),
+  demote_grace_days: z.number().int(),
+  lock_manual: z.boolean(),
+  manual_grantable: z.boolean(),
+  visible: z.boolean(),
+  exempt_hr: z.boolean(),
+  exempt_ratio_matrix: z.boolean(),
+  member_count: z.number().int().optional(),
+});
+export type ClassItem = z.infer<typeof classItem>;
+
+export const classesResponse = z.object({ items: z.array(classItem) });
+export type ClassesResponse = z.infer<typeof classesResponse>;
+
+export const createClassBody = z.object({
+  slug: z.string().regex(/^[a-z0-9][a-z0-9-]*$/).max(32),
+  name: z.string().min(1).max(64),
+  rank: z.number().int().optional(),
+  badge: z.string().max(32).nullable().optional(),
+  color: z.string().max(32).nullable().optional(),
+  description: z.string().max(500).default(""),
+  permissions: z.array(z.string().max(64)).default([]),
+  invite_quota: z.number().int().min(0).max(100).default(0),
+  auto_approve_quota: z.number().int().min(0).max(100).default(0),
+  promote_rule: classRule.nullable().default(null),
+  demote_rule: classRule.nullable().default(null),
+  promote_grace_days: z.number().int().min(0).max(365).default(0),
+  demote_grace_days: z.number().int().min(0).max(365).default(0),
+  lock_manual: z.boolean().default(false),
+  manual_grantable: z.boolean().default(true),
+  visible: z.boolean().default(true),
+  exempt_hr: z.boolean().default(false),
+  exempt_ratio_matrix: z.boolean().default(false),
+});
+export type CreateClassBody = z.infer<typeof createClassBody>;
+
+export const updateClassBody = createClassBody.omit({ slug: true }).partial();
+export type UpdateClassBody = z.infer<typeof updateClassBody>;
+
+export const classOrderBody = z.object({ slugs: z.array(z.string()).min(1) });
+
+export const ratioMatrixRow = z.object({ download_gb: z.number().min(0), min_ratio: z.number().min(0) });
+export const classRulesSettings = z.object({
+  matrix_enabled: z.boolean(),
+  ratio_matrix: z.array(ratioMatrixRow).max(20),
+});
+export type ClassRulesSettings = z.infer<typeof classRulesSettings>;
+
+export const classNotificationTemplates = z.object({
+  promote: z.string().max(500),
+  demote: z.string().max(500),
+  demote_warning: z.string().max(500),
+});
+export type ClassNotificationTemplates = z.infer<typeof classNotificationTemplates>;
+
+export const classSimulationRequest = z.object({ user_id: z.number().int() });
+export const classSimulationResponse = z.object({
+  user_id: z.number().int(),
+  current: classBrief,
+  target: classBrief.nullable(),
+  action: z.enum(["promote", "demote", "keep"]),
+  missing: z.array(z.string()),
+  locked_until: z.number().nullable(),
+});
+export type ClassSimulationResponse = z.infer<typeof classSimulationResponse>;
+
+export const classRecalcResponse = z.object({
+  ok: z.boolean(),
+  scanned: z.number().int(),
+  promoted: z.number().int(),
+  demoted: z.number().int(),
+});
+export type ClassRecalcResponse = z.infer<typeof classRecalcResponse>;
+
+export const classRunItem = z.object({
+  id: z.number().int(),
+  started_at: z.number(),
+  finished_at: z.number().nullable(),
+  scanned: z.number().int(),
+  promoted: z.number().int(),
+  demoted: z.number().int(),
+  error: z.string().nullable(),
+  triggered_by: z.string(),
+});
+export const classRunsResponse = z.object({ items: z.array(classRunItem) });
+export type ClassRunsResponse = z.infer<typeof classRunsResponse>;
+
+export const classGrantBody = z.object({
+  class_slug: z.string().min(1).max(32),
+  expires_at: z.number().int().optional(),
+  lock: z.boolean().optional(),
+});
+export type ClassGrantBody = z.infer<typeof classGrantBody>;
+
+export const userPermissionOverridesBody = z.object({
+  extra: z.array(z.string().max(64)).max(100).default([]),
+  denied: z.array(z.string().max(64)).max(100).default([]),
+  expires_at: z.number().int().optional(),
+});
+export type UserPermissionOverridesBody = z.infer<typeof userPermissionOverridesBody>;
+
+export const userPermissionOverridesResponse = z.object({
+  extra: z.array(z.string()),
+  denied: z.array(z.string()),
+  expires_at: z.number().nullable(),
+});
+export type UserPermissionOverridesResponse = z.infer<typeof userPermissionOverridesResponse>;
+
+export const schedulerConfig = z.object({
+  recalc_enabled: z.boolean(),
+  recalc_cron: z.string().min(5).max(64),
+  next_run_at: z.number().nullable(),
+});
+export type SchedulerConfig = z.infer<typeof schedulerConfig>;
