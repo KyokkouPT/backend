@@ -60,6 +60,13 @@ describe("invites", () => {
     expect(body.code.length).toBe(32);
     expect(body.status).toBe("unused");
 
+    const casePreview = await ctx.app.inject({
+      method: "GET",
+      url: `${API_PREFIX}/invites/${body.code.toLowerCase()}`,
+    });
+    expect(casePreview.statusCode).toBe(200);
+    expect((casePreview.json() as { valid: boolean }).valid).toBe(true);
+
     const list = await ctx.app.inject({
       method: "GET",
       url: `${API_PREFIX}/me/invites`,
@@ -90,7 +97,7 @@ describe("invites", () => {
         password: "newbie-pass-123",
         password_confirm: "newbie-pass-123",
         rules_accepted: true,
-        invite_code: code,
+        invite_code: code.toLowerCase(),
       },
     });
 

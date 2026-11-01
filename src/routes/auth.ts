@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import { randomBytes } from "node:crypto";
+import { sql, type SqlBool } from "kysely";
 import {
   API_PREFIX,
   authMeResponse,
@@ -177,7 +178,7 @@ export function authRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginAs
           const invite = await db
             .selectFrom("invites")
             .selectAll()
-            .where("code", "=", inviteCode)
+            .where(sql<SqlBool>`upper(${sql.ref("code")}) = ${inviteCode}`)
             .executeTakeFirst();
           if (!invite || invite.status !== "unused" || Number(invite.expires_at) <= Date.now()) {
             throw badRequest("invalid_invite", "邀请码不存在、已被使用或已过期");
@@ -212,7 +213,7 @@ export function authRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginAs
             const consumed = await trx
               .updateTable("invites")
               .set({ status: "used", used_at: now })
-              .where("code", "=", inviteCode)
+              .where(sql<SqlBool>`upper(${sql.ref("code")}) = ${inviteCode}`)
               .where("status", "=", "unused")
               .execute();
             if (Number(consumed[0]?.numUpdatedRows ?? 0) === 0) {
@@ -275,7 +276,7 @@ export function authRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginAs
             await trx
               .updateTable("invites")
               .set({ invited_user_id: Number(created.id) })
-              .where("code", "=", inviteCode)
+              .where(sql<SqlBool>`upper(${sql.ref("code")}) = ${inviteCode}`)
               .execute();
           }
         });

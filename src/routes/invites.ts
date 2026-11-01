@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import { randomBytes } from "node:crypto";
+import { sql, type SqlBool } from "kysely";
 import { API_PREFIX, inviteCreateBody, inviteItem, invitePreview, invitesResponse } from "@kyokkou/contracts";
 import type { Db } from "../db/db.js";
 import { assertCsrf, requireAuth } from "../auth/csrf.js";
@@ -12,6 +13,15 @@ const INVITE_TTL_MS = 30 * 86_400_000;
 
 function newInviteCode(): string {
   return randomBytes(16).toString("hex").toUpperCase();
+}
+
+function isCodeCollision(error: unknown): boolean {
+  const candidate = error as { code?: unknown; errno?: unknown; message?: unknown };
+  if (candidate.code === "SQLITE_CONSTRAINT_UNIQUE" || candidate.code === "23505") return true;
+  if (candidate.errno === 1062) return true;
+  return /unique constraint failed: invites\.code|duplicate entry .*invites\.code/i.test(
+    typeof candidate.message === "string" ? candidate.message : "",
+  );
 }
 
 export function inviteRoutes(deps: { db: Db }): FastifyPluginAsync {
@@ -85,33 +95,44 @@ export function inviteRoutes(deps: { db: Db }): FastifyPluginAsync {
       }
 
       const now = Date.now();
-      const code = newInviteCode();
-      await db.transaction().execute(async (trx) => {
-        const updated = await trx
-          .updateTable("users")
-          .set((eb) => ({ invite_balance: eb("invite_balance", "-", 1) }))
-          .where("id", "=", Number(auth.user.id))
-          .where("invite_balance", ">", 0)
-          .execute();
-        if (Number(updated[0]?.numUpdatedRows ?? 0) === 0) {
-          throw conflict("invite_quota_exhausted", "邀请余额不足");
+      let code: string | null = null;
+      for (let attempt = 0; attempt < 8 && code === null; attempt += 1) {
+        const candidate = newInviteCode();
+        try {
+          await db.transaction().execute(async (trx) => {
+            const updated = await trx
+              .updateTable("users")
+              .set((eb) => ({ invite_balance: eb("invite_balance", "-", 1) }))
+              .where("id", "=", Number(auth.user.id))
+              .where("invite_balance", ">", 0)
+              .execute();
+            if (Number(updated[0]?.numUpdatedRows ?? 0) === 0) {
+              throw conflict("invite_quota_exhausted", "邀请余额不足");
+            }
+            await trx
+              .insertInto("invites")
+              .values({
+                code: candidate,
+                inviter_id: Number(auth.user.id),
+                invited_user_id: null,
+                status: "unused",
+                note: null,
+                expires_at: now + INVITE_TTL_MS,
+                created_at: now,
+                used_at: null,
+                email,
+                username,
+              })
+              .execute();
+          });
+          code = candidate;
+        } catch (error) {
+          if (!isCodeCollision(error)) throw error;
         }
-        await trx
-          .insertInto("invites")
-          .values({
-            code,
-            inviter_id: Number(auth.user.id),
-            invited_user_id: null,
-            status: "unused",
-            note: null,
-            expires_at: now + INVITE_TTL_MS,
-            created_at: now,
-            used_at: null,
-            email,
-            username,
-          })
-          .execute();
-      });
+      }
+      if (code === null) {
+        throw new HttpProblem(500, "invite_code_generation_failed", "邀请码生成失败，请重试");
+      }
 
       return reply.status(201).send(
         inviteItem.parse({
@@ -139,7 +160,7 @@ export function inviteRoutes(deps: { db: Db }): FastifyPluginAsync {
           "i.username as username",
           "u.username as inviter",
         ])
-        .where("i.code", "=", code)
+        .where(sql<SqlBool>`upper(${sql.ref("i.code")}) = ${code}`)
         .executeTakeFirst();
 
       if (!row) {
