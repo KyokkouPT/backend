@@ -15,6 +15,7 @@
     "test": "vitest run",
     "migrate": "node --env-file-if-exists=.env --import tsx src/db/migrate-cli.ts",
     "admin:create": "node --env-file-if-exists=.env --import tsx src/db/admin-cli.ts",
+    "reset-password": "node --env-file-if-exists=.env --import tsx src/db/reset-password-cli.ts",
     "seed": "node --env-file-if-exists=.env --import tsx src/db/seed-cli.ts",
     "db:check": "node --env-file-if-exists=.env --import tsx src/db/check.ts"
   },
