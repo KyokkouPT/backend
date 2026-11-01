@@ -105,6 +105,7 @@ export const siteRegistration = z.object({
   closed_message: z.string(),
   closed_registration_mode: z.enum(["auto", "form", "message"]),
   invite_require_email: z.boolean(),
+  invite_require_username: z.boolean(),
 });
 export type SiteRegistration = z.infer<typeof siteRegistration>;
 
@@ -686,11 +687,13 @@ export const inviteItem = z.object({
   used_at: z.number().nullable(),
   invited_user: z.string().nullable(),
   email: z.string().nullable(),
+  username: z.string().nullable(),
 });
 export type InviteItem = z.infer<typeof inviteItem>;
 
 export const inviteCreateBody = z.object({
   email: z.string().email().max(190).optional(),
+  username: z.string().min(3).max(32).optional(),
 });
 export type InviteCreateBody = z.infer<typeof inviteCreateBody>;
 
@@ -706,6 +709,8 @@ export const invitePreview = z.object({
   reason: z.string().nullable(),
   inviter: z.string().nullable(),
   expires_at: z.number().nullable(),
+  email: z.string().nullable(),
+  username: z.string().nullable(),
 });
 export type InvitePreview = z.infer<typeof invitePreview>;
 
@@ -1024,6 +1029,7 @@ export const staffSettings = z.object({
     closed_message: z.string().max(500),
     closed_registration_mode: z.enum(["auto", "form", "message"]),
     invite_require_email: z.boolean(),
+    invite_require_username: z.boolean(),
   }),
   tracker: z.object({
     announce_interval: z.number().int().min(60),

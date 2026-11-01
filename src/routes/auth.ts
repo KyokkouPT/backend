@@ -168,6 +168,7 @@ export function authRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginAs
 
         let inviterId: number | null = null;
         let inviteEmail: string | null = null;
+        let inviteUsername: string | null = null;
         if (inviteCode.length > 0) {
           const invite = await db
             .selectFrom("invites")
@@ -179,10 +180,14 @@ export function authRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginAs
           }
           inviterId = Number(invite.inviter_id);
           inviteEmail = invite.email === null ? null : invite.email.toLowerCase();
+          inviteUsername = invite.username === null ? null : invite.username.toLowerCase();
         }
 
         const username = usernameOrThrow(body.username);
         const email = body.email.trim().toLowerCase();
+        if (inviteUsername !== null && username !== inviteUsername) {
+          throw badRequest("invite_username_mismatch", "用户名与邀请码预注册用户名不一致");
+        }
         if (inviteEmail !== null && email !== inviteEmail) {
           throw badRequest("invite_email_mismatch", "注册邮箱与邀请码预注册邮箱不一致");
         }

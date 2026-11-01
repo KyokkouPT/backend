@@ -45,6 +45,7 @@ describe("migrations", () => {
         { version: 15, name: "username_permission_cleanup" },
         { version: 16, name: "bonus_shop" },
         { version: 17, name: "invite_email" },
+        { version: 18, name: "invite_username" },
       ]);
 
       const users = await db.selectFrom("users").selectAll().execute();

@@ -6,6 +6,7 @@ import { assertCsrf, requireAuth } from "../auth/csrf.js";
 import { HttpProblem, badRequest, conflict } from "../lib/problem.js";
 import { loadSettings } from "../lib/settings.js";
 import { parseOrThrow } from "../lib/validate.js";
+import { validateUsername } from "../lib/username.js";
 
 const INVITE_TTL_MS = 30 * 86_400_000;
 
@@ -29,6 +30,7 @@ export function inviteRoutes(deps: { db: Db }): FastifyPluginAsync {
           "i.expires_at as expires_at",
           "i.used_at as used_at",
           "i.email as email",
+          "i.username as username",
           "u.username as invited_user",
         ])
         .where("i.inviter_id", "=", Number(auth.user.id))
@@ -52,6 +54,7 @@ export function inviteRoutes(deps: { db: Db }): FastifyPluginAsync {
           used_at: row.used_at === null ? null : Number(row.used_at),
           invited_user: row.invited_user,
           email: row.email,
+          username: row.username,
         })),
         quota_used: used,
         quota_total: Number(userRow.invite_balance),
@@ -67,8 +70,18 @@ export function inviteRoutes(deps: { db: Db }): FastifyPluginAsync {
       const body = parseOrThrow(inviteCreateBody, request.body ?? {});
       const settings = await loadSettings(db);
       const email = body.email?.trim().toLowerCase() || null;
+      const usernameChecked = body.username
+        ? validateUsername(body.username, { allowAdmin: false })
+        : null;
+      if (usernameChecked && !usernameChecked.ok) {
+        throw badRequest(usernameChecked.code, usernameChecked.message);
+      }
+      const username = usernameChecked?.ok ? usernameChecked.username : null;
       if (settings.registration.invite_require_email && !email) {
         throw badRequest("invite_email_required", "当前生成邀请码必须填写预注册邮箱");
+      }
+      if (settings.registration.invite_require_username && !username) {
+        throw badRequest("invite_username_required", "当前生成邀请码必须填写预注册用户名");
       }
 
       const now = Date.now();
@@ -95,6 +108,7 @@ export function inviteRoutes(deps: { db: Db }): FastifyPluginAsync {
             created_at: now,
             used_at: null,
             email,
+            username,
           })
           .execute();
       });
@@ -108,6 +122,7 @@ export function inviteRoutes(deps: { db: Db }): FastifyPluginAsync {
           used_at: null,
           invited_user: null,
           email,
+          username,
         }),
       );
     });
@@ -120,6 +135,8 @@ export function inviteRoutes(deps: { db: Db }): FastifyPluginAsync {
         .select([
           "i.status as status",
           "i.expires_at as expires_at",
+          "i.email as email",
+          "i.username as username",
           "u.username as inviter",
         ])
         .where("i.code", "=", code)
@@ -131,6 +148,8 @@ export function inviteRoutes(deps: { db: Db }): FastifyPluginAsync {
           reason: "邀请码不存在",
           inviter: null,
           expires_at: null,
+          email: null,
+          username: null,
         });
       }
 
@@ -141,6 +160,8 @@ export function inviteRoutes(deps: { db: Db }): FastifyPluginAsync {
         reason: row.status !== "unused" ? "邀请码已被使用" : expired ? "邀请码已过期" : null,
         inviter: row.inviter ?? null,
         expires_at: Number(row.expires_at),
+        email: valid ? row.email : null,
+        username: valid ? row.username : null,
       });
     });
   };

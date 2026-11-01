@@ -116,12 +116,14 @@ describe("invites", () => {
     expect(items.some((item) => item.kind === "invite")).toBe(true);
   });
 
-  it("can require and enforce a pre-registered invite email", async () => {
+  it("can require and enforce pre-registered invite email and username", async () => {
     const enable = await ctx.app.inject({
       method: "PUT",
       url: `${API_PREFIX}/staff/settings`,
       headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
-      payload: { registration: { invite_require_email: true } },
+      payload: {
+        registration: { invite_require_email: true, invite_require_username: true },
+      },
     });
     expect(enable.statusCode).toBe(200);
 
@@ -138,11 +140,25 @@ describe("invites", () => {
       method: "POST",
       url: `${API_PREFIX}/me/invites`,
       headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
-      payload: { email: "invitee@example.com" },
+      payload: { email: "invitee@example.com", username: "invitee" },
     });
     expect(generated.statusCode).toBe(201);
-    const generatedBody = generated.json() as { code: string; email: string | null };
+    const generatedBody = generated.json() as {
+      code: string;
+      email: string | null;
+      username: string | null;
+    };
     expect(generatedBody.email).toBe("invitee@example.com");
+    expect(generatedBody.username).toBe("invitee");
+
+    const preview = await ctx.app.inject({
+      method: "GET",
+      url: `${API_PREFIX}/invites/${generatedBody.code}`,
+    });
+    expect((preview.json() as { email: string; username: string }).email).toBe(
+      "invitee@example.com",
+    );
+    expect((preview.json() as { email: string; username: string }).username).toBe("invitee");
 
     const { cookie, token } = await csrfPair();
     const mismatch = await ctx.app.inject({
@@ -159,6 +175,21 @@ describe("invites", () => {
     });
     expect(mismatch.statusCode).toBe(400);
     expect((mismatch.json() as { code: string }).code).toBe("invite_email_mismatch");
+
+    const wrongUsername = await ctx.app.inject({
+      method: "POST",
+      url: `${API_PREFIX}/auth/signup`,
+      headers: { cookie, "x-csrf-token": token },
+      payload: {
+        username: "wrongname",
+        email: "invitee@example.com",
+        password: "invitee-pass-123",
+        rules_accepted: true,
+        invite_code: generatedBody.code,
+      },
+    });
+    expect(wrongUsername.statusCode).toBe(400);
+    expect((wrongUsername.json() as { code: string }).code).toBe("invite_username_mismatch");
 
     const signup = await ctx.app.inject({
       method: "POST",
@@ -178,7 +209,7 @@ describe("invites", () => {
       method: "PUT",
       url: `${API_PREFIX}/staff/settings`,
       headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
-      payload: { registration: { invite_require_email: false } },
+      payload: { registration: { invite_require_email: false, invite_require_username: false } },
     });
   });
 

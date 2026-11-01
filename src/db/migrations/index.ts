@@ -16,6 +16,7 @@ import { migration014 } from "./014_username_rules.js";
 import { migration015 } from "./015_username_permission_cleanup.js";
 import { migration016 } from "./016_bonus_shop.js";
 import { migration017 } from "./017_invite_email.js";
+import { migration018 } from "./018_invite_username.js";
 
 /** 有序迁移清单；新增迁移只追加，不改历史版本。 */
 export const migrations: Migration[] = [
@@ -36,6 +37,7 @@ export const migrations: Migration[] = [
   migration015,
   migration016,
   migration017,
+  migration018,
 ];
 
 export const LATEST_SCHEMA_VERSION = migrations.reduce(
