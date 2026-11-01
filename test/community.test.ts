@@ -116,6 +116,72 @@ describe("invites", () => {
     expect(items.some((item) => item.kind === "invite")).toBe(true);
   });
 
+  it("can require and enforce a pre-registered invite email", async () => {
+    const enable = await ctx.app.inject({
+      method: "PUT",
+      url: `${API_PREFIX}/staff/settings`,
+      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
+      payload: { registration: { invite_require_email: true } },
+    });
+    expect(enable.statusCode).toBe(200);
+
+    const missingEmail = await ctx.app.inject({
+      method: "POST",
+      url: `${API_PREFIX}/me/invites`,
+      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
+      payload: {},
+    });
+    expect(missingEmail.statusCode).toBe(400);
+    expect((missingEmail.json() as { code: string }).code).toBe("invite_email_required");
+
+    const generated = await ctx.app.inject({
+      method: "POST",
+      url: `${API_PREFIX}/me/invites`,
+      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
+      payload: { email: "invitee@example.com" },
+    });
+    expect(generated.statusCode).toBe(201);
+    const generatedBody = generated.json() as { code: string; email: string | null };
+    expect(generatedBody.email).toBe("invitee@example.com");
+
+    const { cookie, token } = await csrfPair();
+    const mismatch = await ctx.app.inject({
+      method: "POST",
+      url: `${API_PREFIX}/auth/signup`,
+      headers: { cookie, "x-csrf-token": token },
+      payload: {
+        username: "invitee",
+        email: "wrong@example.com",
+        password: "invitee-pass-123",
+        rules_accepted: true,
+        invite_code: generatedBody.code,
+      },
+    });
+    expect(mismatch.statusCode).toBe(400);
+    expect((mismatch.json() as { code: string }).code).toBe("invite_email_mismatch");
+
+    const signup = await ctx.app.inject({
+      method: "POST",
+      url: `${API_PREFIX}/auth/signup`,
+      headers: { cookie, "x-csrf-token": token },
+      payload: {
+        username: "invitee",
+        email: "invitee@example.com",
+        password: "invitee-pass-123",
+        rules_accepted: true,
+        invite_code: generatedBody.code,
+      },
+    });
+    expect(signup.statusCode).toBe(201);
+
+    await ctx.app.inject({
+      method: "PUT",
+      url: `${API_PREFIX}/staff/settings`,
+      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
+      payload: { registration: { invite_require_email: false } },
+    });
+  });
+
   it("rejects duplicate accounts, bad invites and missing csrf", async () => {
     const { cookie, token } = await csrfPair();
     const duplicate = await ctx.app.inject({

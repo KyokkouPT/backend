@@ -1,9 +1,11 @@
 import type { FastifyPluginAsync } from "fastify";
 import { randomBytes } from "node:crypto";
-import { API_PREFIX, inviteItem, invitePreview, invitesResponse } from "@kyokkou/contracts";
+import { API_PREFIX, inviteCreateBody, inviteItem, invitePreview, invitesResponse } from "@kyokkou/contracts";
 import type { Db } from "../db/db.js";
 import { assertCsrf, requireAuth } from "../auth/csrf.js";
-import { HttpProblem, conflict } from "../lib/problem.js";
+import { HttpProblem, badRequest, conflict } from "../lib/problem.js";
+import { loadSettings } from "../lib/settings.js";
+import { parseOrThrow } from "../lib/validate.js";
 
 const INVITE_TTL_MS = 30 * 86_400_000;
 
@@ -26,6 +28,7 @@ export function inviteRoutes(deps: { db: Db }): FastifyPluginAsync {
           "i.created_at as created_at",
           "i.expires_at as expires_at",
           "i.used_at as used_at",
+          "i.email as email",
           "u.username as invited_user",
         ])
         .where("i.inviter_id", "=", Number(auth.user.id))
@@ -48,6 +51,7 @@ export function inviteRoutes(deps: { db: Db }): FastifyPluginAsync {
           expires_at: Number(row.expires_at),
           used_at: row.used_at === null ? null : Number(row.used_at),
           invited_user: row.invited_user,
+          email: row.email,
         })),
         quota_used: used,
         quota_total: Number(userRow.invite_balance),
@@ -60,6 +64,12 @@ export function inviteRoutes(deps: { db: Db }): FastifyPluginAsync {
         throw new HttpProblem(403, "forbidden", "当前等级不能生成邀请");
       }
       assertCsrf(request, auth.session);
+      const body = parseOrThrow(inviteCreateBody, request.body ?? {});
+      const settings = await loadSettings(db);
+      const email = body.email?.trim().toLowerCase() || null;
+      if (settings.registration.invite_require_email && !email) {
+        throw badRequest("invite_email_required", "当前生成邀请码必须填写预注册邮箱");
+      }
 
       const now = Date.now();
       const code = newInviteCode();
@@ -84,6 +94,7 @@ export function inviteRoutes(deps: { db: Db }): FastifyPluginAsync {
             expires_at: now + INVITE_TTL_MS,
             created_at: now,
             used_at: null,
+            email,
           })
           .execute();
       });
@@ -96,6 +107,7 @@ export function inviteRoutes(deps: { db: Db }): FastifyPluginAsync {
           expires_at: now + INVITE_TTL_MS,
           used_at: null,
           invited_user: null,
+          email,
         }),
       );
     });

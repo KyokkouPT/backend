@@ -18,6 +18,7 @@ export const registrationSettings = z.object({
   invite_registration_enabled: z.boolean(),
   closed_message: z.string().max(500),
   closed_registration_mode: z.enum(["auto", "form", "message"]).default("auto"),
+  invite_require_email: z.boolean().default(false),
 });
 
 export const trackerSettings = z.object({
@@ -123,6 +124,7 @@ export const DEFAULT_SETTINGS: Settings = {
     invite_registration_enabled: true,
     closed_message: "本站当前关闭注册，请等待开放或联系管理员获取邀请码。",
     closed_registration_mode: "auto",
+    invite_require_email: false,
   },
   tracker: {
     announce_interval: 1800,

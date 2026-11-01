@@ -382,6 +382,7 @@ export interface InvitesTable {
   expires_at: number;
   created_at: number;
   used_at: number | null;
+  email: string | null;
 }
 
 export interface RequestsTable {

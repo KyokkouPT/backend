@@ -167,6 +167,7 @@ export function authRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginAs
         }
 
         let inviterId: number | null = null;
+        let inviteEmail: string | null = null;
         if (inviteCode.length > 0) {
           const invite = await db
             .selectFrom("invites")
@@ -177,10 +178,14 @@ export function authRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginAs
             throw badRequest("invalid_invite", "邀请码不存在、已被使用或已过期");
           }
           inviterId = Number(invite.inviter_id);
+          inviteEmail = invite.email === null ? null : invite.email.toLowerCase();
         }
 
         const username = usernameOrThrow(body.username);
         const email = body.email.trim().toLowerCase();
+        if (inviteEmail !== null && email !== inviteEmail) {
+          throw badRequest("invite_email_mismatch", "注册邮箱与邀请码预注册邮箱不一致");
+        }
         const existing = await db
           .selectFrom("users")
           .select("id")
