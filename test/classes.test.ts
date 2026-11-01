@@ -90,7 +90,7 @@ describe("class system", () => {
     expect(tooHigh.statusCode).toBe(403);
   });
 
-  it("validates manual class changes", async () => {
+  it("allows manual changes to auto classes", async () => {
     const target = await userId("axue");
     const promote = await ctx.app.inject({
       method: "PUT",
@@ -106,7 +106,15 @@ describe("class system", () => {
       headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
       payload: { class_slug: "user" },
     });
-    expect(downgrade.statusCode).toBe(400);
+    expect(downgrade.statusCode).toBe(200);
+    const row = await ctx.db
+      .selectFrom("users as u")
+      .innerJoin("classes as c", "c.id", "u.class_id")
+      .select(["c.slug", "u.demote_due_at"])
+      .where("u.id", "=", target)
+      .executeTakeFirstOrThrow();
+    expect(row.slug).toBe("user");
+    expect(row.demote_due_at).toBeNull();
 
     const unknown = await ctx.app.inject({
       method: "PUT",

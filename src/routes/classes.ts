@@ -25,7 +25,6 @@ import { assertCsrf, requireAuth } from "../auth/csrf.js";
 import {
   classBriefOf,
   classPermissionError,
-  isAutoDemote,
   isAutoPromote,
   loadAllClasses,
   loadClassById,
@@ -579,9 +578,6 @@ export function classRoutes(deps: { db: Db }): FastifyPluginAsync {
       const fromClass =
         targetUser.class_id === null ? null : await loadClassById(db, Number(targetUser.class_id));
       const fromRank = fromClass ? Number(fromClass.rank) : 0;
-      if (Number(toClass.rank) < fromRank && (isAutoDemote(toClass) || isAutoPromote(toClass))) {
-        throw badRequest("auto_class_demote", "自动等级不能手动降级");
-      }
 
       const now = Date.now();
       const lock = body.lock === true;

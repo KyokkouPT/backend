@@ -136,6 +136,41 @@ describe("staff user management", () => {
     expect(forbidden.statusCode).toBe(403);
   });
 
+  it("allows a staff edit to an auto class and clears the old demote warning", async () => {
+    const id = await findUser("axue");
+    const honor = await ctx.db
+      .selectFrom("classes")
+      .select("id")
+      .where("slug", "=", "honor")
+      .executeTakeFirstOrThrow();
+    await ctx.db
+      .updateTable("users")
+      .set({
+        class_id: Number(honor.id),
+        class_key: "honor",
+        demote_due_at: Date.now() + 86_400_000,
+      })
+      .where("id", "=", id)
+      .execute();
+
+    const res = await ctx.app.inject({
+      method: "PUT",
+      url: `${API_PREFIX}/staff/users/${String(id)}`,
+      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
+      payload: { class_slug: "member" },
+    });
+    expect(res.statusCode).toBe(200);
+
+    const row = await ctx.db
+      .selectFrom("users as u")
+      .innerJoin("classes as c", "c.id", "u.class_id")
+      .select(["c.slug", "u.demote_due_at"])
+      .where("u.id", "=", id)
+      .executeTakeFirstOrThrow();
+    expect(row.slug).toBe("member");
+    expect(row.demote_due_at).toBeNull();
+  });
+
   it("edits counted traffic, bonus and password without touching raw traffic", async () => {
     const id = await findUser("axue");
     const before = await ctx.db

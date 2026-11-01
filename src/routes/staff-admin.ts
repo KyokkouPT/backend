@@ -22,7 +22,7 @@ import type { Db } from "../db/db.js";
 import { currentSchemaVersion } from "../db/migrate.js";
 import { assertCsrf, requireAuth } from "../auth/csrf.js";
 import { hashPassword } from "../auth/password.js";
-import { classBriefOf, isAutoDemote, loadClassById, loadClassBySlug } from "../lib/classes.js";
+import { classBriefOf, loadClassBySlug } from "../lib/classes.js";
 import { deleteAllSessionsOfUser } from "../auth/session.js";
 import { loadAppeals } from "../lib/appeals.js";
 import { createNotification } from "../lib/notifications.js";
@@ -302,14 +302,10 @@ export function staffAdminRoutes(deps: { db: Db }): FastifyPluginAsync {
           throw badRequest("class_not_grantable", "该等级不允许手动授予");
         }
         assertRankBelowOperator(auth, Number(newClass.rank));
-        const currentClass =
-          target.class_id === null ? null : await loadClassById(db, Number(target.class_id));
-        const currentRank = currentClass ? Number(currentClass.rank) : 0;
-        if (Number(newClass.rank) < currentRank && (isAutoDemote(newClass) || newClass.permissions_json.includes("class.auto_promote"))) {
-          throw badRequest("auto_class_demote", "自动等级不能手动降级，请等待自动重算");
-        }
         patch.class_id = Number(newClass.id);
         patch.class_key = newClass.slug;
+        // 手动调整后从当前等级重新开始观察；下一次重算可以正常升降。
+        patch.demote_due_at = null;
       }
       if (body.email) {
         const email = body.email.trim().toLowerCase();
