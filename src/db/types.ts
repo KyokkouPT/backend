@@ -95,6 +95,19 @@ export interface TrackerSessionsTable {
   created_at: number;
 }
 
+export interface StaffMessageJobsTable {
+  id: Generated<number>;
+  token: string;
+  actor_id: number;
+  payload_json: string;
+  status: string;
+  recipients: number;
+  error: string | null;
+  created_at: number;
+  started_at: number | null;
+  finished_at: number | null;
+}
+
 export interface UsersTable {
   id: Generated<number>;
   username: string;
@@ -529,6 +542,7 @@ export interface Database {
   job_leases: JobLeasesTable;
   peers: PeersTable;
   tracker_sessions: TrackerSessionsTable;
+  staff_message_jobs: StaffMessageJobsTable;
   username_reservations: UsernameReservationsTable;
   username_changes: UsernameChangesTable;
   user_credits: UserCreditsTable;

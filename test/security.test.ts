@@ -153,7 +153,7 @@ describe("staff moderation", () => {
     const body = summary.json() as { open_reports: number; anomalies: number; schema_version: number };
     expect(body.open_reports).toBeGreaterThanOrEqual(1);
     expect(body.anomalies).toBeGreaterThanOrEqual(1);
-    expect(body.schema_version).toBe(20);
+    expect(body.schema_version).toBe(21);
 
     const search = await ctx.app.inject({
       method: "GET",

@@ -1281,9 +1281,21 @@ export const staffMessagePreviewResponse = z.object({
 export type StaffMessagePreviewResponse = z.infer<typeof staffMessagePreviewResponse>;
 
 export const staffMessageSendResponse = z.object({
-  recipients: z.number().int(),
+  job_token: z.string(),
+  status: z.enum(["queued", "running", "completed", "failed"]),
 });
 export type StaffMessageSendResponse = z.infer<typeof staffMessageSendResponse>;
+
+export const staffMessageJob = z.object({
+  token: z.string(),
+  status: z.enum(["queued", "running", "completed", "failed"]),
+  recipients: z.number().int(),
+  error: z.string().nullable(),
+  created_at: z.number(),
+  started_at: z.number().nullable(),
+  finished_at: z.number().nullable(),
+});
+export type StaffMessageJob = z.infer<typeof staffMessageJob>;
 
 export const classItem = z.object({
   id: z.number().int(),

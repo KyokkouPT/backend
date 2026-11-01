@@ -1,19 +1,22 @@
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
+import { randomBytes } from "node:crypto";
 import {
   API_PREFIX,
   PERMISSIONS,
   classRule,
   staffMessageBody,
+  staffMessageJob,
   staffMessageOptions,
   staffMessagePreviewResponse,
   staffMessageSendResponse,
   type ClassRule,
+  type StaffMessageJob,
 } from "@kyokkou/contracts";
 import type { Db } from "../db/db.js";
 import { assertCsrf, requireAuth } from "../auth/csrf.js";
 import { buildMetrics, type RecalcUser } from "../lib/class-decision.js";
 import { evaluateRule } from "../lib/classes.js";
-import { badRequest, forbidden } from "../lib/problem.js";
+import { badRequest, forbidden, notFound } from "../lib/problem.js";
 import { parseOrThrow } from "../lib/validate.js";
 
 const MESSAGE_KIND = "broadcast";
@@ -152,6 +155,126 @@ async function resolveRecipients(db: Db, body: ReturnType<typeof staffMessageBod
   });
 }
 
+function jobView(row: {
+  token: string;
+  status: string;
+  recipients: number;
+  error: string | null;
+  created_at: number;
+  started_at: number | null;
+  finished_at: number | null;
+}): StaffMessageJob {
+  return staffMessageJob.parse({
+    token: row.token,
+    status: row.status,
+    recipients: Number(row.recipients),
+    error: row.error,
+    created_at: Number(row.created_at),
+    started_at: row.started_at === null ? null : Number(row.started_at),
+    finished_at: row.finished_at === null ? null : Number(row.finished_at),
+  });
+}
+
+/** 处理一个已落库的群发任务；由请求触发，或由服务器定时补偿。 */
+export async function processStaffMessageJob(db: Db, token: string): Promise<void> {
+  const now = Date.now();
+  const claimed = await db
+    .updateTable("staff_message_jobs")
+    .set({ status: "running", started_at: now })
+    .where("token", "=", token)
+    .where("status", "=", "queued")
+    .executeTakeFirst();
+  if (Number(claimed.numUpdatedRows ?? 0) === 0) return;
+
+  const job = await db
+    .selectFrom("staff_message_jobs")
+    .selectAll()
+    .where("token", "=", token)
+    .executeTakeFirst();
+  if (!job) return;
+
+  try {
+    const body = staffMessageBody.parse(JSON.parse(job.payload_json) as unknown);
+    const linkUrl = normalizeLink(body.link_url);
+    const users = await resolveRecipients(db, body);
+    if (users.length === 0) throw new Error("没有符合条件的收件人");
+
+    const sentAt = Date.now();
+    await db.transaction().execute(async (trx) => {
+      for (let index = 0; index < users.length; index += INSERT_CHUNK) {
+        const chunk = users.slice(index, index + INSERT_CHUNK);
+        await trx
+          .insertInto("notifications")
+          .values(
+            chunk.map((user) => ({
+              user_id: Number(user.id),
+              kind: MESSAGE_KIND,
+              title: body.title,
+              body: body.body,
+              link_url: linkUrl,
+              read_at: null,
+              created_at: sentAt,
+            })),
+          )
+          .execute();
+      }
+      await trx
+        .insertInto("audit_logs")
+        .values({
+          actor_id: Number(job.actor_id),
+          action: "staff.mass_message",
+          target_type: "user",
+          target_id: token,
+          detail_json: JSON.stringify({
+            recipients: users.length,
+            class_slugs: body.class_slugs ?? [],
+            user_ids: body.user_ids ?? [],
+            conditions: body.conditions ?? null,
+            title: body.title,
+          }),
+          ip: null,
+          created_at: sentAt,
+        })
+        .execute();
+      await trx
+        .updateTable("staff_message_jobs")
+        .set({ status: "completed", recipients: users.length, finished_at: sentAt })
+        .where("token", "=", token)
+        .execute();
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    await db
+      .updateTable("staff_message_jobs")
+      .set({ status: "failed", error: message.slice(0, 1000), finished_at: Date.now() })
+      .where("token", "=", token)
+      .execute();
+  }
+}
+
+/** 服务器启动/定时补偿：处理 queued 任务，并把卡住的 running 任务放回队列。 */
+export async function processQueuedStaffMessageJobs(db: Db): Promise<number> {
+  const staleCutoff = Date.now() - 10 * 60 * 1000;
+  await db
+    .updateTable("staff_message_jobs")
+    .set({ status: "queued", started_at: null })
+    .where("status", "=", "running")
+    .where("started_at", "<", staleCutoff)
+    .execute();
+
+  const rows = await db
+    .selectFrom("staff_message_jobs")
+    .select("token")
+    .where("status", "=", "queued")
+    .orderBy("id", "asc")
+    .limit(5)
+    .execute();
+  for (const row of rows) {
+    await processStaffMessageJob(db, row.token);
+  }
+  return rows.length;
+}
+
 export function staffMessageRoutes(deps: { db: Db }): FastifyPluginAsync {
   return async (app) => {
     const { db } = deps;
@@ -184,54 +307,45 @@ export function staffMessageRoutes(deps: { db: Db }): FastifyPluginAsync {
       });
     });
 
+    app.get(`${API_PREFIX}/staff/messages/jobs/:token`, async (request) => {
+      const auth = requireAnnouncement(request);
+      const token = (request.params as { token: string }).token;
+      const job = await db
+        .selectFrom("staff_message_jobs")
+        .selectAll()
+        .where("token", "=", token)
+        .where("actor_id", "=", Number(auth.user.id))
+        .executeTakeFirst();
+      if (!job) throw notFound("message_job_not_found", "群发任务不存在");
+      return jobView(job);
+    });
+
     app.post(`${API_PREFIX}/staff/messages`, async (request) => {
       const auth = requireAnnouncement(request);
       assertCsrf(request, auth.session);
       const body = parseOrThrow(staffMessageBody, request.body ?? {});
-      const linkUrl = normalizeLink(body.link_url);
-      const users = await resolveRecipients(db, body);
-      if (users.length === 0) throw badRequest("no_recipients", "没有符合条件的收件人");
+      normalizeLink(body.link_url);
 
+      const token = randomBytes(16).toString("hex");
       const now = Date.now();
-      await db.transaction().execute(async (trx) => {
-        for (let index = 0; index < users.length; index += INSERT_CHUNK) {
-          const chunk = users.slice(index, index + INSERT_CHUNK);
-          await trx
-            .insertInto("notifications")
-            .values(
-              chunk.map((user) => ({
-                user_id: Number(user.id),
-                kind: MESSAGE_KIND,
-                title: body.title,
-                body: body.body,
-                link_url: linkUrl,
-                read_at: null,
-                created_at: now,
-              })),
-            )
-            .execute();
-        }
-        await trx
-          .insertInto("audit_logs")
-          .values({
-            actor_id: Number(auth.user.id),
-            action: "staff.mass_message",
-            target_type: "user",
-            target_id: String(users.length),
-            detail_json: JSON.stringify({
-              recipients: users.length,
-              class_slugs: body.class_slugs ?? [],
-              user_ids: body.user_ids ?? [],
-              conditions: body.conditions ?? null,
-              title: body.title,
-            }),
-            ip: request.ip,
-            created_at: now,
-          })
-          .execute();
-      });
+      await db
+        .insertInto("staff_message_jobs")
+        .values({
+          token,
+          actor_id: Number(auth.user.id),
+          payload_json: JSON.stringify(body),
+          status: "queued",
+          recipients: 0,
+          error: null,
+          created_at: now,
+          started_at: null,
+          finished_at: null,
+        })
+        .execute();
 
-      return staffMessageSendResponse.parse({ recipients: users.length });
+      void processStaffMessageJob(db, token);
+
+      return staffMessageSendResponse.parse({ job_token: token, status: "queued" });
     });
   };
 }

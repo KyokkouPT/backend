@@ -4,6 +4,7 @@ import { createDb } from "./db/db.js";
 import { currentSchemaVersion, runMigrations } from "./db/migrate.js";
 import { settleHnr } from "./lib/hnr.js";
 import { initSchedulers, stopSchedulers } from "./lib/scheduler.js";
+import { processQueuedStaffMessageJobs } from "./routes/staff-messages.js";
 import { prunePeers } from "./tracker/peer-store.js";
 
 const PEER_TTL_MS = 60 * 60 * 1000;
@@ -84,6 +85,15 @@ async function main(): Promise<void> {
       .catch((error: unknown) => app.log.error(error, "peer prune failed"));
   }, MAINTENANCE_INTERVAL_MS);
   peerTimer.unref();
+
+  const messageTimer = setInterval(() => {
+    void processQueuedStaffMessageJobs(db)
+      .then((processed) => {
+        if (processed > 0) app.log.info({ processed }, "staff message jobs processed");
+      })
+      .catch((error: unknown) => app.log.error(error, "staff message job worker failed"));
+  }, 2_000);
+  messageTimer.unref();
 
   // 魔力值与等级重算调度：两条 cron 独立，共用一个调度器进程。
   initSchedulers(db, app.log, config.instanceId);

@@ -18,6 +18,21 @@ afterAll(async () => {
 });
 
 describe("staff mass messages", () => {
+  async function waitJob(token: string) {
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const res = await ctx.app.inject({
+        method: "GET",
+        url: `${API_PREFIX}/staff/messages/jobs/${token}`,
+        headers: { cookie: admin.cookieHeader },
+      });
+      expect(res.statusCode).toBe(200);
+      const job = res.json() as { status: string; recipients: number };
+      if (job.status === "completed" || job.status === "failed") return job;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    throw new Error("message job did not finish");
+  }
+
   it("returns target class options", async () => {
     const res = await ctx.app.inject({
       method: "GET",
@@ -59,7 +74,12 @@ describe("staff mass messages", () => {
       },
     });
     expect(res.statusCode).toBe(200);
-    expect((res.json() as { recipients: number }).recipients).toBe(1);
+    const queued = res.json() as { job_token: string; status: string };
+    expect(queued.status).toBe("queued");
+    expect(queued.job_token.length).toBeGreaterThan(10);
+    const job = await waitJob(queued.job_token);
+    expect(job.status).toBe("completed");
+    expect(job.recipients).toBe(1);
 
     const notifications = await ctx.app.inject({
       method: "GET",
