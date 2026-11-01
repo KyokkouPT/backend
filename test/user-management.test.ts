@@ -120,15 +120,25 @@ describe("staff user management", () => {
     expect(blocked.statusCode).toBe(409);
   });
 
-  it("blocks self role/status changes and non-admin access", async () => {
+  it("allows self demotion but blocks self delete and non-admin access", async () => {
     const self = await findUser("lightbringer");
+    const previous = await ctx.db
+      .selectFrom("users")
+      .select(["class_id", "class_key"])
+      .where("id", "=", self)
+      .executeTakeFirstOrThrow();
     const roleChange = await ctx.app.inject({
       method: "PUT",
       url: `${API_PREFIX}/staff/users/${String(self)}`,
       headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
       payload: { class_slug: "user" },
     });
-    expect(roleChange.statusCode).toBe(400);
+    expect(roleChange.statusCode).toBe(200);
+    await ctx.db
+      .updateTable("users")
+      .set({ class_id: previous.class_id, class_key: previous.class_key })
+      .where("id", "=", self)
+      .execute();
 
     const selfDelete = await ctx.app.inject({
       method: "DELETE",

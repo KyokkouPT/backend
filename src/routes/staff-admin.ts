@@ -65,11 +65,14 @@ function requirePerm(request: FastifyRequest, permission: string) {
   return auth;
 }
 
-/** 操作者只能授予/调整 rank 严格低于自己的等级。 */
-function assertRankBelowOperator(auth: ReturnType<typeof requirePerm>, targetRank: number): void {
+/** 操作者只能授予/调整 rank 不高于自己的等级。 */
+function assertRankAtOrBelowOperator(
+  auth: ReturnType<typeof requirePerm>,
+  targetRank: number,
+): void {
   const operatorRank = auth.class ? Number(auth.class.rank) : 0;
-  if (targetRank >= operatorRank) {
-    throw new HttpProblem(403, "rank_too_high", "只能操作等级低于自己的用户等级");
+  if (targetRank > operatorRank) {
+    throw new HttpProblem(403, "rank_too_high", "只能操作等级不高于自己的用户等级");
   }
 }
 
@@ -175,7 +178,7 @@ export function staffAdminRoutes(deps: { db: Db }): FastifyPluginAsync {
       const classSlug = body.class_slug?.trim() || body.class_key?.trim() || "user";
       const targetClass = await loadClassBySlug(db, classSlug);
       if (!targetClass) throw badRequest("class_not_found", "等级不存在");
-      assertRankBelowOperator(auth, Number(targetClass.rank));
+      assertRankAtOrBelowOperator(auth, Number(targetClass.rank));
 
       const now = Date.now();
       const passwordHash = await hashPassword(body.password);
@@ -297,11 +300,10 @@ export function staffAdminRoutes(deps: { db: Db }): FastifyPluginAsync {
       if (classSlug) {
         newClass = await loadClassBySlug(db, classSlug);
         if (!newClass) throw badRequest("class_not_found", "等级不存在");
-        if (self) throw badRequest("self_class", "不能修改自己的等级");
         if (Number(newClass.manual_grantable) === 0) {
           throw badRequest("class_not_grantable", "该等级不允许手动授予");
         }
-        assertRankBelowOperator(auth, Number(newClass.rank));
+        assertRankAtOrBelowOperator(auth, Number(newClass.rank));
         patch.class_id = Number(newClass.id);
         patch.class_key = newClass.slug;
         // 手动调整后从当前等级重新开始观察；下一次重算可以正常升降。
