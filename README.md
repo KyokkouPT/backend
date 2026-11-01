@@ -90,7 +90,7 @@ seed 开发账号（密码由 `SEED_PASSWORD` 控制，默认 `kyokkou-dev`）�
 - SQLite / PostgreSQL 的迁移在一个事务里；MySQL/MariaDB 的 DDL 非事务，失败会明确抛错，重试前需人工检查。
 - 主键按方言生成：SQLite `integer primary key autoincrement`、MySQL `bigint auto_increment`、PostgreSQL `bigserial`。
 - 计数/时间戳是 bigint 列，应用层统一 number（写入 < 2^53）；PostgreSQL 的 int8 在 `db.ts` 里解析为 number。
-- 换库：改 `DATABASE_DRIVER`/`DATABASE_URL` 后执行 `pnpm migrate && pnpm seed`。SQLite 是默认路径；改动 SQL 时需同时验证 MySQL 8.4 / PostgreSQL 16。
+- 换库：改 `DATABASE_DRIVER`/`DATABASE_URL` 后执行 `pnpm migrate && pnpm seed`。SQLite 是默认路径；MySQL 8.4、MariaDB 11、PostgreSQL 16 已实测 migrate/seed/db:check/API/Tracker/bonus。
 
 ## 已实现 API
 
