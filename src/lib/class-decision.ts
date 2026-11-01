@@ -122,6 +122,7 @@ export function decideDemotion(
 
   const demoteRule = parseRule(current.demote_rule_json);
   if (demoteRule) {
+    // NexusPHP 语义：存在降级规则时，只由该规则决定是否降级。
     if (!evaluateRule(demoteRule, metrics)) return { target: null, reason: null };
     const configured = current.demote_target_slug
       ? (ctx.classBySlug.get(current.demote_target_slug) ?? null)
@@ -132,6 +133,7 @@ export function decideDemotion(
     };
   }
 
+  // 没有降级规则时，才回退到升级规则判断。
   const promoteRule = parseRule(current.promote_rule_json);
   if (promoteRule && !evaluateRule(promoteRule, metrics)) {
     return {
