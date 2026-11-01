@@ -114,8 +114,10 @@ export function decideDemotion(
 
   const violation = matrixViolation(ctx.rules, current, metrics.downloaded, metrics.ratio);
   if (violation) {
+    const target =
+      ctx.classBySlug.get(ctx.rules.matrix_target_slug) ?? ctx.classBySlug.get("leechwarn") ?? null;
     return {
-      target: ctx.classBySlug.get("leechwarn") ?? null,
+      target,
       reason: `下载量超过 ${String(violation.download_gb)}GB 时分享率低于 ${String(violation.min_ratio)}`,
     };
   }

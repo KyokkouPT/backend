@@ -29,11 +29,13 @@ export const DEFAULT_RATIO_MATRIX: RatioMatrixRow[] = [
 export type ClassRules = {
   matrix_enabled: boolean;
   ratio_matrix: RatioMatrixRow[];
+  matrix_target_slug: string;
 };
 
 export const DEFAULT_CLASS_RULES: ClassRules = {
   matrix_enabled: true,
   ratio_matrix: DEFAULT_RATIO_MATRIX,
+  matrix_target_slug: "leechwarn",
 };
 
 export async function loadClassRules(db: Db): Promise<ClassRules> {
@@ -59,6 +61,10 @@ export async function loadClassRules(db: Db): Promise<ClassRules> {
     return {
       matrix_enabled: parsed.matrix_enabled !== false,
       ratio_matrix: matrix.length > 0 ? matrix : DEFAULT_RATIO_MATRIX,
+      matrix_target_slug:
+        typeof parsed.matrix_target_slug === "string" && parsed.matrix_target_slug.trim()
+          ? parsed.matrix_target_slug.trim()
+          : DEFAULT_CLASS_RULES.matrix_target_slug,
     };
   } catch {
     return DEFAULT_CLASS_RULES;

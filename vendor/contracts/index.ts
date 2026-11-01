@@ -1268,6 +1268,7 @@ export const ratioMatrixRow = z.object({ download_gb: z.number().min(0), min_rat
 export const classRulesSettings = z.object({
   matrix_enabled: z.boolean(),
   ratio_matrix: z.array(ratioMatrixRow).max(20),
+  matrix_target_slug: z.string().min(1).max(32),
 });
 export type ClassRulesSettings = z.infer<typeof classRulesSettings>;
 

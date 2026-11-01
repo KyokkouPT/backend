@@ -401,6 +401,89 @@ describe("class system", () => {
     expect((runs.json() as { items: unknown[] }).items.length).toBeGreaterThanOrEqual(2);
   });
 
+  it("uses the configured global matrix target and rejects unknown targets", async () => {
+    const rulesResponse = await ctx.app.inject({
+      method: "GET",
+      url: `${API_PREFIX}/staff/classes/rules`,
+      headers: { cookie: admin.cookieHeader },
+    });
+    expect(rulesResponse.statusCode).toBe(200);
+    const rules = rulesResponse.json() as {
+      matrix_enabled: boolean;
+      ratio_matrix: { download_gb: number; min_ratio: number }[];
+      matrix_target_slug: string;
+    };
+    expect(rules.matrix_target_slug).toBe("leechwarn");
+
+    const target = await userId("root");
+    const advanced = await ctx.db
+      .selectFrom("classes")
+      .select("id")
+      .where("slug", "=", "advanced")
+      .executeTakeFirstOrThrow();
+    await ctx.db
+      .updateTable("classes")
+      .set({ demote_grace_days: 0 })
+      .where("id", "=", advanced.id)
+      .execute();
+    await ctx.db
+      .updateTable("users")
+      .set({
+        class_id: Number(advanced.id),
+        class_key: "advanced",
+        created_at: Date.now(),
+        uploaded: 0,
+        downloaded: 50 * 1024 ** 3,
+        demote_due_at: null,
+      })
+      .where("id", "=", target)
+      .execute();
+
+    const saved = await ctx.app.inject({
+      method: "PUT",
+      url: `${API_PREFIX}/staff/classes/rules`,
+      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
+      payload: { ...rules, matrix_target_slug: "member" },
+    });
+    expect(saved.statusCode).toBe(200);
+    expect((saved.json() as { matrix_target_slug: string }).matrix_target_slug).toBe("member");
+
+    const recalc = await ctx.app.inject({
+      method: "POST",
+      url: `${API_PREFIX}/staff/classes/recalc`,
+      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
+      payload: {},
+    });
+    expect(recalc.statusCode).toBe(200);
+    const row = await ctx.db
+      .selectFrom("users as u")
+      .innerJoin("classes as c", "c.id", "u.class_id")
+      .select("c.slug")
+      .where("u.id", "=", target)
+      .executeTakeFirstOrThrow();
+    expect(row.slug).toBe("member");
+
+    const invalid = await ctx.app.inject({
+      method: "PUT",
+      url: `${API_PREFIX}/staff/classes/rules`,
+      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
+      payload: { ...rules, matrix_target_slug: "missing-class" },
+    });
+    expect(invalid.statusCode).toBe(400);
+
+    await ctx.app.inject({
+      method: "PUT",
+      url: `${API_PREFIX}/staff/classes/rules`,
+      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
+      payload: rules,
+    });
+    await ctx.db
+      .updateTable("classes")
+      .set({ demote_grace_days: 7 })
+      .where("id", "=", advanced.id)
+      .execute();
+  });
+
   it("validates cron expressions and their minimum interval", () => {
     expect(validateCronExpression("*/15 * * * *").ok).toBe(true);
     expect(validateCronExpression("* * * * *").ok).toBe(false);

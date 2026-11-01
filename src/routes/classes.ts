@@ -381,7 +381,13 @@ export function classRoutes(deps: { db: Db }): FastifyPluginAsync {
       const matrix = body.ratio_matrix
         .slice()
         .sort((a, b) => a.download_gb - b.download_gb);
-      await saveClassRules(db, { matrix_enabled: body.matrix_enabled, ratio_matrix: matrix });
+      const matrixTarget = await loadClassBySlug(db, body.matrix_target_slug);
+      if (!matrixTarget) throw badRequest("class_not_found", "分享率矩阵目标等级不存在");
+      await saveClassRules(db, {
+        matrix_enabled: body.matrix_enabled,
+        ratio_matrix: matrix,
+        matrix_target_slug: matrixTarget.slug,
+      });
       await db
         .insertInto("audit_logs")
         .values({
@@ -389,12 +395,20 @@ export function classRoutes(deps: { db: Db }): FastifyPluginAsync {
           action: "class.rules_update",
           target_type: "class",
           target_id: "rules",
-          detail_json: JSON.stringify({ matrix_enabled: body.matrix_enabled, rows: matrix.length }),
+          detail_json: JSON.stringify({
+            matrix_enabled: body.matrix_enabled,
+            rows: matrix.length,
+            matrix_target_slug: matrixTarget.slug,
+          }),
           ip: request.ip,
           created_at: Date.now(),
         })
         .execute();
-      return classRulesSettings.parse({ matrix_enabled: body.matrix_enabled, ratio_matrix: matrix });
+      return classRulesSettings.parse({
+        matrix_enabled: body.matrix_enabled,
+        ratio_matrix: matrix,
+        matrix_target_slug: matrixTarget.slug,
+      });
     });
 
     app.get(`${API_PREFIX}/staff/classes/notifications`, async (request) => {
