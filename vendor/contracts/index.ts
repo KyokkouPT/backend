@@ -657,7 +657,11 @@ const staffExchangeBaseBody = z.object({
 });
 
 export const staffExchangeItemCreateBody = staffExchangeBaseBody.extend({
-  key: z.string().min(2).max(64).regex(/^[a-z0-9_]+$/),
+  key: z
+    .string()
+    .min(2)
+    .max(64)
+    .regex(/^[a-zA-Z0-9_]+$/, "key 只能包含字母、数字和下划线"),
 });
 export type StaffExchangeItemCreateBody = z.infer<typeof staffExchangeItemCreateBody>;
 

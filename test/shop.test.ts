@@ -91,7 +91,7 @@ describe("bonus shop admin", () => {
       url: `${API_PREFIX}/staff/bonus/items`,
       headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
       payload: {
-        key: "admin_created",
+        key: "Admin_Created",
         name: "管理员创建",
         direction: "buy",
         type: "upload_add",
@@ -101,6 +101,7 @@ describe("bonus shop admin", () => {
       },
     });
     expect(created.statusCode).toBe(201);
+    expect((created.json() as { key: string }).key).toBe("admin_created");
     const list = await ctx.app.inject({
       method: "GET",
       url: `${API_PREFIX}/staff/bonus/items`,

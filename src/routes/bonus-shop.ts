@@ -170,10 +170,14 @@ export function bonusShopRoutes(deps: { db: Db }): FastifyPluginAsync {
       assertCsrf(request, auth.session);
       const body = parseOrThrow(staffExchangeItemCreateBody, request.body ?? {});
       const normalized = normalizeBody(body);
+      const itemKey = body.key.trim().toLowerCase();
+      if (!/^[a-z0-9_]{2,64}$/.test(itemKey)) {
+        throw badRequest("invalid_key", "key 只能包含小写字母、数字和下划线");
+      }
       const existing = await db
         .selectFrom("exchange_items")
         .select("id")
-        .where("key", "=", body.key)
+        .where("key", "=", itemKey)
         .executeTakeFirst();
       if (existing) throw conflict("exchange_key_taken", "兑换项 key 已存在");
 
@@ -181,7 +185,7 @@ export function bonusShopRoutes(deps: { db: Db }): FastifyPluginAsync {
       const inserted = await db
         .insertInto("exchange_items")
         .values({
-          key: body.key,
+          key: itemKey,
           name: body.name.trim(),
           description: body.description?.trim() || null,
           price: normalized.price,
@@ -201,7 +205,7 @@ export function bonusShopRoutes(deps: { db: Db }): FastifyPluginAsync {
       const created = await db
         .selectFrom("exchange_items")
         .selectAll()
-        .where("key", "=", body.key)
+        .where("key", "=", itemKey)
         .executeTakeFirstOrThrow();
 
       await db
