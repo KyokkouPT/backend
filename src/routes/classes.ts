@@ -171,6 +171,13 @@ export function classRoutes(deps: { db: Db }): FastifyPluginAsync {
       });
     });
 
+    // 用户管理需要包含 hidden 等级（管理组等），但只要求 staff.users。
+    app.get(`${API_PREFIX}/staff/users/classes`, async (request) => {
+      requirePerm(request, PERMISSIONS.staffUsers);
+      const rows = await loadAllClasses(db);
+      return classesResponse.parse({ items: rows.map((row) => classItem(row)) });
+    });
+
     app.post(`${API_PREFIX}/staff/classes`, async (request, reply) => {
       const auth = requirePerm(request, PERMISSIONS.staffClasses);
       assertCsrf(request, auth.session);
