@@ -273,6 +273,13 @@ export function staffAdminRoutes(deps: { db: Db }): FastifyPluginAsync {
       }
       if (body.status) patch.status = body.status;
       if (body.password) patch.password_hash = await hashPassword(body.password);
+      if (body.uploaded !== undefined) patch.uploaded = body.uploaded;
+      if (body.downloaded !== undefined) patch.downloaded = body.downloaded;
+      let bonusDelta: number | null = null;
+      if (body.bonus !== undefined) {
+        patch.bonus = body.bonus;
+        bonusDelta = body.bonus - Number(target.bonus);
+      }
 
       if (Object.keys(patch).length === 0) {
         throw badRequest("nothing_to_update", "没有需要修改的内容");
@@ -281,6 +288,21 @@ export function staffAdminRoutes(deps: { db: Db }): FastifyPluginAsync {
       const now = Date.now();
       await db.transaction().execute(async (trx) => {
         await trx.updateTable("users").set(patch).where("id", "=", id).execute();
+        if (bonusDelta !== null && bonusDelta !== 0 && body.bonus !== undefined) {
+          await trx
+            .insertInto("bonus_ledger")
+            .values({
+              user_id: id,
+              kind: "adjust",
+              delta: bonusDelta,
+              balance_after: body.bonus,
+              ref_type: "staff_adjust",
+              ref_id: String(auth.user.id),
+              note: `Staff 调整（${auth.user.username}）`,
+              created_at: now,
+            })
+            .execute();
+        }
         await trx
           .insertInto("audit_logs")
           .values({

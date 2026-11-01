@@ -974,6 +974,12 @@ export const staffUpdateUserBody = z.object({
   class_slug: z.string().min(1).max(32).optional(),
   status: userStatus.optional(),
   password: z.string().min(8).max(200).optional(),
+  /** 计入上传量（不改变实际上传 raw_uploaded）。 */
+  uploaded: z.number().int().min(0).optional(),
+  /** 计入下载量（不改变实际下载 raw_downloaded）。 */
+  downloaded: z.number().int().min(0).optional(),
+  /** 魔力值余额。 */
+  bonus: z.number().int().min(0).optional(),
   /** @deprecated 兼容旧客户端；优先使用 class_slug。 */
   role: role.optional(),
   /** @deprecated 兼容旧客户端；优先使用 class_slug。 */

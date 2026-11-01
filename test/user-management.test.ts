@@ -135,4 +135,50 @@ describe("staff user management", () => {
     });
     expect(forbidden.statusCode).toBe(403);
   });
+
+  it("edits counted traffic, bonus and password without touching raw traffic", async () => {
+    const id = await findUser("阿雪");
+    const before = await ctx.db
+      .selectFrom("users")
+      .select(["bonus", "raw_uploaded", "raw_downloaded"])
+      .where("id", "=", id)
+      .executeTakeFirstOrThrow();
+    const GB = 1024 ** 3;
+
+    const res = await ctx.app.inject({
+      method: "PUT",
+      url: `${API_PREFIX}/staff/users/${String(id)}`,
+      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
+      payload: {
+        uploaded: 500 * GB,
+        downloaded: 100 * GB,
+        bonus: 999,
+        password: "new-pass-12345",
+      },
+    });
+    expect(res.statusCode).toBe(200);
+
+    const after = await ctx.db
+      .selectFrom("users")
+      .select(["uploaded", "downloaded", "bonus", "raw_uploaded", "raw_downloaded"])
+      .where("id", "=", id)
+      .executeTakeFirstOrThrow();
+    expect(Number(after.uploaded)).toBe(500 * GB);
+    expect(Number(after.downloaded)).toBe(100 * GB);
+    expect(Number(after.bonus)).toBe(999);
+    expect(Number(after.raw_uploaded)).toBe(Number(before.raw_uploaded));
+    expect(Number(after.raw_downloaded)).toBe(Number(before.raw_downloaded));
+
+    const ledger = await ctx.db
+      .selectFrom("bonus_ledger")
+      .select(["kind", "delta"])
+      .where("user_id", "=", id)
+      .where("kind", "=", "adjust")
+      .executeTakeFirst();
+    expect(ledger).toBeTruthy();
+    expect(Number(ledger?.delta)).toBe(999 - Number(before.bonus));
+
+    const relogin = await login(ctx.app, "阿雪", "new-pass-12345");
+    expect(relogin.username).toBe("阿雪");
+  });
 });
