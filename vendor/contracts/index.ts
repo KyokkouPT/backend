@@ -718,6 +718,7 @@ export const signupRequest = z.object({
   username: z.string().min(2).max(64),
   email: z.string().email().max(190),
   password: z.string().min(8).max(200),
+  password_confirm: z.string().min(8).max(200),
   rules_accepted: z.literal(true),
   invite_code: z.string().max(32).optional(),
 });

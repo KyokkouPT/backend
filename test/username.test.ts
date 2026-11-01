@@ -210,6 +210,7 @@ describe("username API", () => {
           username: "NewUser",
           email: "newuser@example.com",
           password: TEST_PASSWORD,
+          password_confirm: TEST_PASSWORD,
           rules_accepted: true,
         },
       });

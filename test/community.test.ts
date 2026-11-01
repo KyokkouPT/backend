@@ -88,6 +88,7 @@ describe("invites", () => {
         username: "newbie",
         email: "newbie@example.com",
         password: "newbie-pass-123",
+        password_confirm: "newbie-pass-123",
         rules_accepted: true,
         invite_code: code,
       },
@@ -169,6 +170,7 @@ describe("invites", () => {
         username: "invitee",
         email: "wrong@example.com",
         password: "invitee-pass-123",
+        password_confirm: "invitee-pass-123",
         rules_accepted: true,
         invite_code: generatedBody.code,
       },
@@ -184,6 +186,7 @@ describe("invites", () => {
         username: "wrongname",
         email: "invitee@example.com",
         password: "invitee-pass-123",
+        password_confirm: "invitee-pass-123",
         rules_accepted: true,
         invite_code: generatedBody.code,
       },
@@ -199,6 +202,7 @@ describe("invites", () => {
         username: "invitee",
         email: "invitee@example.com",
         password: "invitee-pass-123",
+        password_confirm: "invitee-pass-123",
         rules_accepted: true,
         invite_code: generatedBody.code,
       },
@@ -215,6 +219,21 @@ describe("invites", () => {
 
   it("rejects duplicate accounts, bad invites and missing csrf", async () => {
     const { cookie, token } = await csrfPair();
+    const mismatch = await ctx.app.inject({
+      method: "POST",
+      url: `${API_PREFIX}/auth/signup`,
+      headers: { cookie, "x-csrf-token": token },
+      payload: {
+        username: "mismatch",
+        email: "mismatch@example.com",
+        password: "mismatch-pass-123",
+        password_confirm: "other-pass-123",
+        rules_accepted: true,
+      },
+    });
+    expect(mismatch.statusCode).toBe(400);
+    expect((mismatch.json() as { code: string }).code).toBe("password_mismatch");
+
     const duplicate = await ctx.app.inject({
       method: "POST",
       url: `${API_PREFIX}/auth/signup`,
@@ -223,6 +242,7 @@ describe("invites", () => {
         username: "newbie",
         email: "other@example.com",
         password: "newbie-pass-123",
+        password_confirm: "newbie-pass-123",
         rules_accepted: true,
       },
     });
@@ -236,6 +256,7 @@ describe("invites", () => {
         username: "other",
         email: "other@example.com",
         password: "newbie-pass-123",
+        password_confirm: "newbie-pass-123",
         rules_accepted: true,
         invite_code: "NOPE",
       },
@@ -249,6 +270,7 @@ describe("invites", () => {
         username: "other2",
         email: "other2@example.com",
         password: "newbie-pass-123",
+        password_confirm: "newbie-pass-123",
         rules_accepted: true,
       },
     });

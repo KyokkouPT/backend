@@ -155,6 +155,9 @@ export function authRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginAs
       async (request, reply) => {
         const body = parseOrThrow(signupRequest, request.body);
         assertCsrf(request, null);
+        if (body.password !== body.password_confirm) {
+          throw badRequest("password_mismatch", "两次输入的密码不一致");
+        }
 
         const settings = await loadSettings(db);
         if (!settings.registration.open && !settings.registration.invite_registration_enabled) {
