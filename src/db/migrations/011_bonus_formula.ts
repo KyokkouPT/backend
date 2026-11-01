@@ -13,12 +13,15 @@ export const migration011: Migration = {
   async up({ db, dialect }) {
     const changeToDouble = async (table: string, column: string): Promise<void> => {
       if (dialect === "sqlite") return;
-      const type = dialect === "postgres" ? "double precision" : sql`double`;
       try {
-        await db.schema
-          .alterTable(table)
-          .alterColumn(column, (ac) => ac.setDataType(type))
-          .execute();
+        if (dialect === "mysql" || dialect === "mariadb") {
+          await sql`alter table ${sql.table(table)} modify column ${sql.ref(column)} double not null default 0`.execute(db);
+        } else {
+          await db.schema
+            .alterTable(table)
+            .alterColumn(column, (ac) => ac.setDataType("double precision"))
+            .execute();
+        }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         // MySQL DDL 非事务；重试时已经改过则跳过。

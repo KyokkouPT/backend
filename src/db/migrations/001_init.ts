@@ -15,12 +15,13 @@ export const migration001: Migration = {
   version: 1,
   name: "init",
   async up({ db, dialect }) {
-    const idType = dialect === "sqlite" ? "integer" : "bigint";
+    const idType = dialect === "sqlite" ? "integer" : dialect === "postgres" ? "bigserial" : "bigint";
+    const blobType = dialect === "postgres" ? "bytea" : "blob";
 
     await db.schema
       .createTable("instance_meta")
       .ifNotExists()
-      .addColumn("id", idType, (col) => col.primaryKey().autoIncrement())
+      .addColumn("id", idType, (col) => (dialect === "postgres" ? col.primaryKey() : col.primaryKey().autoIncrement()))
       .addColumn("instance_id", "varchar(64)", (col) => col.notNull().unique())
       .addColumn("schema_version", "integer", (col) => col.notNull().defaultTo(0))
       .addColumn("install_state", "varchar(32)", (col) => col.notNull().defaultTo("installed"))
@@ -38,7 +39,7 @@ export const migration001: Migration = {
     await db.schema
       .createTable("audit_logs")
       .ifNotExists()
-      .addColumn("id", idType, (col) => col.primaryKey().autoIncrement())
+      .addColumn("id", idType, (col) => (dialect === "postgres" ? col.primaryKey() : col.primaryKey().autoIncrement()))
       .addColumn("actor_id", "bigint")
       .addColumn("action", "varchar(64)", (col) => col.notNull())
       .addColumn("target_type", "varchar(32)")
@@ -50,7 +51,6 @@ export const migration001: Migration = {
 
     await db.schema
       .createIndex("audit_logs_created_idx")
-      .ifNotExists()
       .on("audit_logs")
       .columns(["created_at"])
       .execute();
@@ -58,7 +58,7 @@ export const migration001: Migration = {
     await db.schema
       .createTable("users")
       .ifNotExists()
-      .addColumn("id", idType, (col) => col.primaryKey().autoIncrement())
+      .addColumn("id", idType, (col) => (dialect === "postgres" ? col.primaryKey() : col.primaryKey().autoIncrement()))
       .addColumn("username", "varchar(64)", (col) => col.notNull().unique())
       .addColumn("email", "varchar(190)", (col) => col.notNull().unique())
       .addColumn("password_hash", "text", (col) => col.notNull())
@@ -77,7 +77,6 @@ export const migration001: Migration = {
 
     await db.schema
       .createIndex("users_status_idx")
-      .ifNotExists()
       .on("users")
       .columns(["status"])
       .execute();
@@ -85,7 +84,7 @@ export const migration001: Migration = {
     await db.schema
       .createTable("sessions")
       .ifNotExists()
-      .addColumn("id", idType, (col) => col.primaryKey().autoIncrement())
+      .addColumn("id", idType, (col) => (dialect === "postgres" ? col.primaryKey() : col.primaryKey().autoIncrement()))
       .addColumn("user_id", "bigint", (col) => col.notNull())
       .addColumn("token_hash", "varchar(64)", (col) => col.notNull().unique())
       .addColumn("csrf_hash", "varchar(64)", (col) => col.notNull())
@@ -97,14 +96,12 @@ export const migration001: Migration = {
 
     await db.schema
       .createIndex("sessions_user_idx")
-      .ifNotExists()
       .on("sessions")
       .columns(["user_id"])
       .execute();
 
     await db.schema
       .createIndex("sessions_expires_idx")
-      .ifNotExists()
       .on("sessions")
       .columns(["expires_at"])
       .execute();
@@ -112,18 +109,18 @@ export const migration001: Migration = {
     await db.schema
       .createTable("sections")
       .ifNotExists()
-      .addColumn("id", idType, (col) => col.primaryKey().autoIncrement())
+      .addColumn("id", idType, (col) => (dialect === "postgres" ? col.primaryKey() : col.primaryKey().autoIncrement()))
       .addColumn("slug", "varchar(32)", (col) => col.notNull().unique())
       .addColumn("name", "varchar(64)", (col) => col.notNull())
       .addColumn("display_order", "integer", (col) => col.notNull().defaultTo(0))
       .addColumn("review_mode", "varchar(16)", (col) => col.notNull().defaultTo("pre"))
-      .addColumn("config_json", "text", (col) => col.notNull().defaultTo("{}"))
+      .addColumn("config_json", "text", (col) => col.notNull())
       .execute();
 
     await db.schema
       .createTable("categories")
       .ifNotExists()
-      .addColumn("id", idType, (col) => col.primaryKey().autoIncrement())
+      .addColumn("id", idType, (col) => (dialect === "postgres" ? col.primaryKey() : col.primaryKey().autoIncrement()))
       .addColumn("section_id", "bigint", (col) => col.notNull())
       .addColumn("slug", "varchar(64)", (col) => col.notNull())
       .addColumn("name", "varchar(64)", (col) => col.notNull())
@@ -132,7 +129,6 @@ export const migration001: Migration = {
 
     await db.schema
       .createIndex("categories_section_slug_uq")
-      .ifNotExists()
       .on("categories")
       .columns(["section_id", "slug"])
       .unique()
@@ -141,7 +137,7 @@ export const migration001: Migration = {
     await db.schema
       .createTable("torrents")
       .ifNotExists()
-      .addColumn("id", idType, (col) => col.primaryKey().autoIncrement())
+      .addColumn("id", idType, (col) => (dialect === "postgres" ? col.primaryKey() : col.primaryKey().autoIncrement()))
       .addColumn("info_hash", "varchar(40)", (col) => col.notNull().unique())
       .addColumn("name", "varchar(255)", (col) => col.notNull())
       .addColumn("section_id", "bigint", (col) => col.notNull())
@@ -156,7 +152,7 @@ export const migration001: Migration = {
       .addColumn("completed", "integer", (col) => col.notNull().defaultTo(0))
       .addColumn("description", "text")
       .addColumn("meta_json", "text")
-      .addColumn("torrent_blob", "blob")
+      .addColumn("torrent_blob", blobType)
       .addColumn("created_at", "bigint", (col) => col.notNull())
       .addColumn("approved_at", "bigint")
       .addColumn("deleted_at", "bigint")
@@ -164,28 +160,24 @@ export const migration001: Migration = {
 
     await db.schema
       .createIndex("torrents_status_created_idx")
-      .ifNotExists()
       .on("torrents")
       .columns(["status", "created_at"])
       .execute();
 
     await db.schema
       .createIndex("torrents_section_idx")
-      .ifNotExists()
       .on("torrents")
       .columns(["section_id"])
       .execute();
 
     await db.schema
       .createIndex("torrents_category_idx")
-      .ifNotExists()
       .on("torrents")
       .columns(["category_id"])
       .execute();
 
     await db.schema
       .createIndex("torrents_uploader_idx")
-      .ifNotExists()
       .on("torrents")
       .columns(["uploader_id"])
       .execute();
@@ -193,7 +185,7 @@ export const migration001: Migration = {
     await db.schema
       .createTable("torrent_files")
       .ifNotExists()
-      .addColumn("id", idType, (col) => col.primaryKey().autoIncrement())
+      .addColumn("id", idType, (col) => (dialect === "postgres" ? col.primaryKey() : col.primaryKey().autoIncrement()))
       .addColumn("torrent_id", "bigint", (col) => col.notNull())
       .addColumn("path", "text", (col) => col.notNull())
       .addColumn("size", "bigint", (col) => col.notNull())
@@ -201,7 +193,6 @@ export const migration001: Migration = {
 
     await db.schema
       .createIndex("torrent_files_torrent_idx")
-      .ifNotExists()
       .on("torrent_files")
       .columns(["torrent_id"])
       .execute();
@@ -209,7 +200,7 @@ export const migration001: Migration = {
     await db.schema
       .createTable("torrent_field_values")
       .ifNotExists()
-      .addColumn("id", idType, (col) => col.primaryKey().autoIncrement())
+      .addColumn("id", idType, (col) => (dialect === "postgres" ? col.primaryKey() : col.primaryKey().autoIncrement()))
       .addColumn("torrent_id", "bigint", (col) => col.notNull())
       .addColumn("field_key", "varchar(32)", (col) => col.notNull())
       .addColumn("value_text", "varchar(255)", (col) => col.notNull())
@@ -217,7 +208,6 @@ export const migration001: Migration = {
 
     await db.schema
       .createIndex("torrent_fields_torrent_key_uq")
-      .ifNotExists()
       .on("torrent_field_values")
       .columns(["torrent_id", "field_key"])
       .unique()
@@ -225,7 +215,6 @@ export const migration001: Migration = {
 
     await db.schema
       .createIndex("torrent_fields_key_value_idx")
-      .ifNotExists()
       .on("torrent_field_values")
       .columns(["field_key", "value_text"])
       .execute();
@@ -233,7 +222,7 @@ export const migration001: Migration = {
     await db.schema
       .createTable("tags")
       .ifNotExists()
-      .addColumn("id", idType, (col) => col.primaryKey().autoIncrement())
+      .addColumn("id", idType, (col) => (dialect === "postgres" ? col.primaryKey() : col.primaryKey().autoIncrement()))
       .addColumn("slug", "varchar(64)", (col) => col.notNull().unique())
       .addColumn("name", "varchar(64)", (col) => col.notNull())
       .execute();
@@ -249,7 +238,7 @@ export const migration001: Migration = {
     await db.schema
       .createTable("promo_events")
       .ifNotExists()
-      .addColumn("id", idType, (col) => col.primaryKey().autoIncrement())
+      .addColumn("id", idType, (col) => (dialect === "postgres" ? col.primaryKey() : col.primaryKey().autoIncrement()))
       .addColumn("name", "varchar(128)", (col) => col.notNull())
       .addColumn("scope", "varchar(128)", (col) => col.notNull())
       .addColumn("promo", "varchar(8)", (col) => col.notNull())
@@ -260,7 +249,7 @@ export const migration001: Migration = {
     await db.schema
       .createTable("announcements")
       .ifNotExists()
-      .addColumn("id", idType, (col) => col.primaryKey().autoIncrement())
+      .addColumn("id", idType, (col) => (dialect === "postgres" ? col.primaryKey() : col.primaryKey().autoIncrement()))
       .addColumn("title", "varchar(190)", (col) => col.notNull())
       .addColumn("body", "text", (col) => col.notNull())
       .addColumn("author_id", "bigint")
@@ -271,7 +260,6 @@ export const migration001: Migration = {
 
     await db.schema
       .createIndex("announcements_created_idx")
-      .ifNotExists()
       .on("announcements")
       .columns(["created_at"])
       .execute();
@@ -279,7 +267,7 @@ export const migration001: Migration = {
     await db.schema
       .createTable("snatches")
       .ifNotExists()
-      .addColumn("id", idType, (col) => col.primaryKey().autoIncrement())
+      .addColumn("id", idType, (col) => (dialect === "postgres" ? col.primaryKey() : col.primaryKey().autoIncrement()))
       .addColumn("user_id", "bigint", (col) => col.notNull())
       .addColumn("torrent_id", "bigint", (col) => col.notNull())
       .addColumn("uploaded", "bigint", (col) => col.notNull().defaultTo(0))
@@ -291,7 +279,6 @@ export const migration001: Migration = {
 
     await db.schema
       .createIndex("snatches_user_torrent_uq")
-      .ifNotExists()
       .on("snatches")
       .columns(["user_id", "torrent_id"])
       .unique()

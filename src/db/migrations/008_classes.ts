@@ -6,19 +6,19 @@ export const migration008: Migration = {
   version: 8,
   name: "classes",
   async up({ db, dialect }) {
-    const idType = dialect === "sqlite" ? "integer" : "bigint";
+    const idType = dialect === "sqlite" ? "integer" : dialect === "postgres" ? "bigserial" : "bigint";
 
     await db.schema
       .createTable("classes")
       .ifNotExists()
-      .addColumn("id", idType, (col) => col.primaryKey().autoIncrement())
+      .addColumn("id", idType, (col) => (dialect === "postgres" ? col.primaryKey() : col.primaryKey().autoIncrement()))
       .addColumn("slug", "varchar(32)", (col) => col.notNull().unique())
       .addColumn("name", "varchar(64)", (col) => col.notNull())
       .addColumn("rank", "integer", (col) => col.notNull())
       .addColumn("badge", "varchar(32)")
       .addColumn("color", "varchar(32)")
-      .addColumn("description", "text", (col) => col.notNull().defaultTo(""))
-      .addColumn("permissions_json", "text", (col) => col.notNull().defaultTo("[]"))
+      .addColumn("description", "text", (col) => col.notNull())
+      .addColumn("permissions_json", "text", (col) => col.notNull())
       .addColumn("invite_quota", "integer", (col) => col.notNull().defaultTo(0))
       .addColumn("auto_approve_quota", "integer", (col) => col.notNull().defaultTo(0))
       .addColumn("promote_rule_json", "text")
@@ -38,7 +38,7 @@ export const migration008: Migration = {
     await db.schema
       .createTable("user_permission_overrides")
       .ifNotExists()
-      .addColumn("id", idType, (col) => col.primaryKey().autoIncrement())
+      .addColumn("id", idType, (col) => (dialect === "postgres" ? col.primaryKey() : col.primaryKey().autoIncrement()))
       .addColumn("user_id", "bigint", (col) => col.notNull())
       .addColumn("permission", "varchar(64)", (col) => col.notNull())
       .addColumn("effect", "varchar(8)", (col) => col.notNull())
@@ -49,14 +49,12 @@ export const migration008: Migration = {
 
     await db.schema
       .createIndex("user_permission_overrides_user_idx")
-      .ifNotExists()
       .on("user_permission_overrides")
       .columns(["user_id"])
       .execute();
 
     await db.schema
       .createIndex("user_permission_overrides_unique_idx")
-      .ifNotExists()
       .unique()
       .on("user_permission_overrides")
       .columns(["user_id", "permission"])
@@ -65,7 +63,7 @@ export const migration008: Migration = {
     await db.schema
       .createTable("user_class_history")
       .ifNotExists()
-      .addColumn("id", idType, (col) => col.primaryKey().autoIncrement())
+      .addColumn("id", idType, (col) => (dialect === "postgres" ? col.primaryKey() : col.primaryKey().autoIncrement()))
       .addColumn("user_id", "bigint", (col) => col.notNull())
       .addColumn("from_class_id", "bigint")
       .addColumn("to_class_id", "bigint", (col) => col.notNull())
@@ -78,7 +76,6 @@ export const migration008: Migration = {
 
     await db.schema
       .createIndex("user_class_history_user_idx")
-      .ifNotExists()
       .on("user_class_history")
       .columns(["user_id", "created_at"])
       .execute();
@@ -86,7 +83,7 @@ export const migration008: Migration = {
     await db.schema
       .createTable("class_recalc_runs")
       .ifNotExists()
-      .addColumn("id", idType, (col) => col.primaryKey().autoIncrement())
+      .addColumn("id", idType, (col) => (dialect === "postgres" ? col.primaryKey() : col.primaryKey().autoIncrement()))
       .addColumn("started_at", "bigint", (col) => col.notNull())
       .addColumn("finished_at", "bigint")
       .addColumn("scanned", "integer", (col) => col.notNull().defaultTo(0))
@@ -100,7 +97,7 @@ export const migration008: Migration = {
     await db.schema
       .createTable("user_class_progress")
       .ifNotExists()
-      .addColumn("id", idType, (col) => col.primaryKey().autoIncrement())
+      .addColumn("id", idType, (col) => (dialect === "postgres" ? col.primaryKey() : col.primaryKey().autoIncrement()))
       .addColumn("user_id", "bigint", (col) => col.notNull())
       .addColumn("target_class_id", "bigint", (col) => col.notNull())
       .addColumn("first_met_at", "bigint", (col) => col.notNull())
@@ -109,7 +106,6 @@ export const migration008: Migration = {
 
     await db.schema
       .createIndex("user_class_progress_unique_idx")
-      .ifNotExists()
       .unique()
       .on("user_class_progress")
       .columns(["user_id", "target_class_id"])
@@ -136,7 +132,6 @@ export const migration008: Migration = {
 
     await db.schema
       .createIndex("users_class_idx")
-      .ifNotExists()
       .on("users")
       .columns(["class_id"])
       .execute();

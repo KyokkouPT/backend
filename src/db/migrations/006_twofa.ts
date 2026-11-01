@@ -5,7 +5,7 @@ export const migration006: Migration = {
   version: 6,
   name: "twofa",
   async up({ db, dialect }) {
-    const idType = dialect === "sqlite" ? "integer" : "bigint";
+    const idType = dialect === "sqlite" ? "integer" : dialect === "postgres" ? "bigserial" : "bigint";
 
     await db.schema.alterTable("users").addColumn("twofa_secret", "varchar(64)").execute();
     await db.schema.alterTable("users").addColumn("twofa_enabled", "integer").execute();
@@ -13,7 +13,7 @@ export const migration006: Migration = {
     await db.schema
       .createTable("twofa_recovery_codes")
       .ifNotExists()
-      .addColumn("id", idType, (col) => col.primaryKey().autoIncrement())
+      .addColumn("id", idType, (col) => (dialect === "postgres" ? col.primaryKey() : col.primaryKey().autoIncrement()))
       .addColumn("user_id", "bigint", (col) => col.notNull())
       .addColumn("code_hash", "varchar(64)", (col) => col.notNull())
       .addColumn("used_at", "bigint")
@@ -22,7 +22,6 @@ export const migration006: Migration = {
 
     await db.schema
       .createIndex("twofa_recovery_user_idx")
-      .ifNotExists()
       .on("twofa_recovery_codes")
       .columns(["user_id"])
       .execute();

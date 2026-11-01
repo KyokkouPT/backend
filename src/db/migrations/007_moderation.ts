@@ -5,12 +5,12 @@ export const migration007: Migration = {
   version: 7,
   name: "moderation",
   async up({ db, dialect }) {
-    const idType = dialect === "sqlite" ? "integer" : "bigint";
+    const idType = dialect === "sqlite" ? "integer" : dialect === "postgres" ? "bigserial" : "bigint";
 
     await db.schema
       .createTable("reports")
       .ifNotExists()
-      .addColumn("id", idType, (col) => col.primaryKey().autoIncrement())
+      .addColumn("id", idType, (col) => (dialect === "postgres" ? col.primaryKey() : col.primaryKey().autoIncrement()))
       .addColumn("reporter_id", "bigint", (col) => col.notNull())
       .addColumn("target_type", "varchar(16)", (col) => col.notNull())
       .addColumn("target_id", "varchar(64)", (col) => col.notNull())
@@ -25,7 +25,6 @@ export const migration007: Migration = {
 
     await db.schema
       .createIndex("reports_status_created_idx")
-      .ifNotExists()
       .on("reports")
       .columns(["status", "created_at"])
       .execute();
@@ -33,7 +32,7 @@ export const migration007: Migration = {
     await db.schema
       .createTable("anomalies")
       .ifNotExists()
-      .addColumn("id", idType, (col) => col.primaryKey().autoIncrement())
+      .addColumn("id", idType, (col) => (dialect === "postgres" ? col.primaryKey() : col.primaryKey().autoIncrement()))
       .addColumn("user_id", "bigint", (col) => col.notNull())
       .addColumn("kind", "varchar(32)", (col) => col.notNull())
       .addColumn("severity", "varchar(16)", (col) => col.notNull().defaultTo("low"))
@@ -46,7 +45,6 @@ export const migration007: Migration = {
 
     await db.schema
       .createIndex("anomalies_status_created_idx")
-      .ifNotExists()
       .on("anomalies")
       .columns(["status", "created_at"])
       .execute();
@@ -54,7 +52,7 @@ export const migration007: Migration = {
     await db.schema
       .createTable("appeals")
       .ifNotExists()
-      .addColumn("id", idType, (col) => col.primaryKey().autoIncrement())
+      .addColumn("id", idType, (col) => (dialect === "postgres" ? col.primaryKey() : col.primaryKey().autoIncrement()))
       .addColumn("user_id", "bigint", (col) => col.notNull())
       .addColumn("kind", "varchar(16)", (col) => col.notNull())
       .addColumn("target_id", "varchar(64)")
@@ -68,7 +66,6 @@ export const migration007: Migration = {
 
     await db.schema
       .createIndex("appeals_status_created_idx")
-      .ifNotExists()
       .on("appeals")
       .columns(["status", "created_at"])
       .execute();
@@ -76,7 +73,7 @@ export const migration007: Migration = {
     await db.schema
       .createTable("appeal_messages")
       .ifNotExists()
-      .addColumn("id", idType, (col) => col.primaryKey().autoIncrement())
+      .addColumn("id", idType, (col) => (dialect === "postgres" ? col.primaryKey() : col.primaryKey().autoIncrement()))
       .addColumn("appeal_id", "bigint", (col) => col.notNull())
       .addColumn("author_id", "bigint", (col) => col.notNull())
       .addColumn("body", "text", (col) => col.notNull())
@@ -85,7 +82,6 @@ export const migration007: Migration = {
 
     await db.schema
       .createIndex("appeal_messages_appeal_idx")
-      .ifNotExists()
       .on("appeal_messages")
       .columns(["appeal_id", "created_at"])
       .execute();

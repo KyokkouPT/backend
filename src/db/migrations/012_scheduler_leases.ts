@@ -16,7 +16,6 @@ export const migration012: Migration = {
 
     await db.schema
       .createIndex("job_leases_expires_idx")
-      .ifNotExists()
       .on("job_leases")
       .columns(["expires_at"])
       .execute();
@@ -35,7 +34,6 @@ export const migration012: Migration = {
       try {
         await db.schema
           .createIndex(index.name)
-          .ifNotExists()
           .on(index.table as never)
           .columns(index.columns)
           .execute();

@@ -8,12 +8,12 @@ export const migration004: Migration = {
   version: 4,
   name: "economy",
   async up({ db, dialect }) {
-    const idType = dialect === "sqlite" ? "integer" : "bigint";
+    const idType = dialect === "sqlite" ? "integer" : dialect === "postgres" ? "bigserial" : "bigint";
 
     await db.schema
       .createTable("hnr_policies")
       .ifNotExists()
-      .addColumn("id", idType, (col) => col.primaryKey().autoIncrement())
+      .addColumn("id", idType, (col) => (dialect === "postgres" ? col.primaryKey() : col.primaryKey().autoIncrement()))
       .addColumn("section_id", "bigint")
       .addColumn("enabled", "integer", (col) => col.notNull().defaultTo(1))
       .addColumn("include_rate", "integer", (col) => col.notNull().defaultTo(100))
@@ -27,7 +27,7 @@ export const migration004: Migration = {
     await db.schema
       .createTable("hnr_obligations")
       .ifNotExists()
-      .addColumn("id", idType, (col) => col.primaryKey().autoIncrement())
+      .addColumn("id", idType, (col) => (dialect === "postgres" ? col.primaryKey() : col.primaryKey().autoIncrement()))
       .addColumn("user_id", "bigint", (col) => col.notNull())
       .addColumn("torrent_id", "bigint", (col) => col.notNull())
       .addColumn("policy_id", "bigint")
@@ -41,7 +41,6 @@ export const migration004: Migration = {
 
     await db.schema
       .createIndex("hnr_obligations_user_torrent_uq")
-      .ifNotExists()
       .on("hnr_obligations")
       .columns(["user_id", "torrent_id"])
       .unique()
@@ -49,7 +48,6 @@ export const migration004: Migration = {
 
     await db.schema
       .createIndex("hnr_obligations_status_deadline_idx")
-      .ifNotExists()
       .on("hnr_obligations")
       .columns(["status", "deadline_at"])
       .execute();
@@ -57,7 +55,7 @@ export const migration004: Migration = {
     await db.schema
       .createTable("bonus_ledger")
       .ifNotExists()
-      .addColumn("id", idType, (col) => col.primaryKey().autoIncrement())
+      .addColumn("id", idType, (col) => (dialect === "postgres" ? col.primaryKey() : col.primaryKey().autoIncrement()))
       .addColumn("user_id", "bigint", (col) => col.notNull())
       .addColumn("kind", "varchar(32)", (col) => col.notNull())
       .addColumn("delta", "bigint", (col) => col.notNull())
@@ -70,7 +68,6 @@ export const migration004: Migration = {
 
     await db.schema
       .createIndex("bonus_ledger_user_created_idx")
-      .ifNotExists()
       .on("bonus_ledger")
       .columns(["user_id", "created_at"])
       .execute();
@@ -78,7 +75,7 @@ export const migration004: Migration = {
     await db.schema
       .createTable("exchange_items")
       .ifNotExists()
-      .addColumn("id", idType, (col) => col.primaryKey().autoIncrement())
+      .addColumn("id", idType, (col) => (dialect === "postgres" ? col.primaryKey() : col.primaryKey().autoIncrement()))
       .addColumn("key", "varchar(64)", (col) => col.notNull().unique())
       .addColumn("name", "varchar(128)", (col) => col.notNull())
       .addColumn("description", "text")
@@ -86,14 +83,14 @@ export const migration004: Migration = {
       .addColumn("inventory", "bigint")
       .addColumn("limit_per_user", "integer")
       .addColumn("enabled", "integer", (col) => col.notNull().defaultTo(1))
-      .addColumn("payload_json", "text", (col) => col.notNull().defaultTo("{}"))
+      .addColumn("payload_json", "text", (col) => col.notNull())
       .addColumn("display_order", "integer", (col) => col.notNull().defaultTo(0))
       .execute();
 
     await db.schema
       .createTable("redemptions")
       .ifNotExists()
-      .addColumn("id", idType, (col) => col.primaryKey().autoIncrement())
+      .addColumn("id", idType, (col) => (dialect === "postgres" ? col.primaryKey() : col.primaryKey().autoIncrement()))
       .addColumn("user_id", "bigint", (col) => col.notNull())
       .addColumn("item_id", "bigint", (col) => col.notNull())
       .addColumn("price", "bigint", (col) => col.notNull())
@@ -104,7 +101,6 @@ export const migration004: Migration = {
 
     await db.schema
       .createIndex("redemptions_idempotency_uq")
-      .ifNotExists()
       .on("redemptions")
       .columns(["idempotency_key"])
       .unique()
@@ -112,7 +108,6 @@ export const migration004: Migration = {
 
     await db.schema
       .createIndex("redemptions_user_created_idx")
-      .ifNotExists()
       .on("redemptions")
       .columns(["user_id", "created_at"])
       .execute();

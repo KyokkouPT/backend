@@ -5,12 +5,12 @@ export const migration005: Migration = {
   version: 5,
   name: "community",
   async up({ db, dialect }) {
-    const idType = dialect === "sqlite" ? "integer" : "bigint";
+    const idType = dialect === "sqlite" ? "integer" : dialect === "postgres" ? "bigserial" : "bigint";
 
     await db.schema
       .createTable("invites")
       .ifNotExists()
-      .addColumn("id", idType, (col) => col.primaryKey().autoIncrement())
+      .addColumn("id", idType, (col) => (dialect === "postgres" ? col.primaryKey() : col.primaryKey().autoIncrement()))
       .addColumn("code", "varchar(32)", (col) => col.notNull().unique())
       .addColumn("inviter_id", "bigint", (col) => col.notNull())
       .addColumn("invited_user_id", "bigint")
@@ -23,7 +23,6 @@ export const migration005: Migration = {
 
     await db.schema
       .createIndex("invites_inviter_created_idx")
-      .ifNotExists()
       .on("invites")
       .columns(["inviter_id", "created_at"])
       .execute();
@@ -31,7 +30,7 @@ export const migration005: Migration = {
     await db.schema
       .createTable("requests")
       .ifNotExists()
-      .addColumn("id", idType, (col) => col.primaryKey().autoIncrement())
+      .addColumn("id", idType, (col) => (dialect === "postgres" ? col.primaryKey() : col.primaryKey().autoIncrement()))
       .addColumn("user_id", "bigint", (col) => col.notNull())
       .addColumn("title", "varchar(190)", (col) => col.notNull())
       .addColumn("description", "text")
@@ -45,7 +44,6 @@ export const migration005: Migration = {
 
     await db.schema
       .createIndex("requests_status_created_idx")
-      .ifNotExists()
       .on("requests")
       .columns(["status", "created_at"])
       .execute();
@@ -53,7 +51,7 @@ export const migration005: Migration = {
     await db.schema
       .createTable("user_preferences")
       .ifNotExists()
-      .addColumn("id", idType, (col) => col.primaryKey().autoIncrement())
+      .addColumn("id", idType, (col) => (dialect === "postgres" ? col.primaryKey() : col.primaryKey().autoIncrement()))
       .addColumn("user_id", "bigint", (col) => col.notNull().unique())
       .addColumn("email_review", "integer", (col) => col.notNull().defaultTo(1))
       .addColumn("email_hnr", "integer", (col) => col.notNull().defaultTo(1))

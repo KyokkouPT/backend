@@ -8,12 +8,12 @@ export const migration002: Migration = {
   version: 2,
   name: "notifications",
   async up({ db, dialect }) {
-    const idType = dialect === "sqlite" ? "integer" : "bigint";
+    const idType = dialect === "sqlite" ? "integer" : dialect === "postgres" ? "bigserial" : "bigint";
 
     await db.schema
       .createTable("notifications")
       .ifNotExists()
-      .addColumn("id", idType, (col) => col.primaryKey().autoIncrement())
+      .addColumn("id", idType, (col) => (dialect === "postgres" ? col.primaryKey() : col.primaryKey().autoIncrement()))
       .addColumn("user_id", "bigint", (col) => col.notNull())
       .addColumn("kind", "varchar(32)", (col) => col.notNull())
       .addColumn("title", "varchar(190)", (col) => col.notNull())
@@ -25,7 +25,6 @@ export const migration002: Migration = {
 
     await db.schema
       .createIndex("notifications_user_read_created_idx")
-      .ifNotExists()
       .on("notifications")
       .columns(["user_id", "read_at", "created_at"])
       .execute();
