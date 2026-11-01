@@ -3,7 +3,7 @@ import { randomBytes } from "node:crypto";
 import { API_PREFIX, inviteItem, invitePreview, invitesResponse } from "@kyokkou/contracts";
 import type { Db } from "../db/db.js";
 import { assertCsrf, requireAuth } from "../auth/csrf.js";
-import { conflict } from "../lib/problem.js";
+import { HttpProblem, conflict } from "../lib/problem.js";
 
 const INVITE_TTL_MS = 30 * 86_400_000;
 
@@ -56,6 +56,9 @@ export function inviteRoutes(deps: { db: Db }): FastifyPluginAsync {
 
     app.post(`${API_PREFIX}/me/invites`, async (request, reply) => {
       const auth = requireAuth(request);
+      if (!auth.permissions.includes("invite.create")) {
+        throw new HttpProblem(403, "forbidden", "当前等级不能生成邀请");
+      }
       assertCsrf(request, auth.session);
 
       const now = Date.now();

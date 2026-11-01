@@ -77,6 +77,9 @@ export function requestRoutes(deps: { db: Db }): FastifyPluginAsync {
 
     app.post(`${API_PREFIX}/requests`, async (request, reply) => {
       const auth = requireAuth(request);
+      if (!auth.permissions.includes("request.create")) {
+        throw new HttpProblem(403, "forbidden", "当前等级不能发布求种");
+      }
       assertCsrf(request, auth.session);
 
       const body = parseOrThrow(createRequestBody, request.body ?? {});

@@ -1,6 +1,7 @@
 import type { Db } from "../db/db.js";
 import { classNotificationTemplates, type ClassNotificationTemplates } from "@kyokkou/contracts";
 import { createNotification } from "./notifications.js";
+import { loadSettings } from "./settings.js";
 
 export const DEFAULT_CLASS_TEMPLATES: ClassNotificationTemplates = {
   promote: "你的等级已升级为「{new_class}」，感谢你的贡献。",
@@ -63,13 +64,17 @@ export async function notifyClassChange(
 ): Promise<void> {
   const templates = await loadClassTemplates(db);
   const template = templates[input.kind];
+  const [userRow, settings] = await Promise.all([
+    db.selectFrom("users").select("username").where("id", "=", input.userId).executeTakeFirst(),
+    loadSettings(db),
+  ]);
   const body = renderClassTemplate(template, {
-    username: "",
+    username: userRow?.username ?? "",
     old_class: input.oldName,
     new_class: input.newName,
     reason: input.reason,
     date: input.date ?? "",
-    site_name: "",
+    site_name: settings.site.name,
   });
 
   await createNotification(db, {

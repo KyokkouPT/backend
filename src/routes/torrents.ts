@@ -11,6 +11,7 @@ import type { AppConfig } from "../config.js";
 import type { Db } from "../db/db.js";
 import { requireAuth } from "../auth/csrf.js";
 import { assertCsrf } from "../auth/csrf.js";
+import { computePermissions, loadClassById, loadClassBySlug, loadOverrides } from "../lib/classes.js";
 import { parseTorrent, rewriteAnnounce } from "../lib/bencode.js";
 import { parseDownHashUid, verifyDownHash } from "../lib/downhash.js";
 import { HttpProblem, badRequest, conflict, notFound, unauthorized } from "../lib/problem.js";
@@ -109,6 +110,9 @@ export function torrentRoutes(deps: { db: Db; config: AppConfig }): FastifyPlugi
 
     app.post(`${API_PREFIX}/torrents`, async (request, reply) => {
       const auth = requireAuth(request);
+      if (!auth.permissions.includes("torrent.upload")) {
+        throw new HttpProblem(403, "forbidden", "当前等级不能发布种子");
+      }
       assertCsrf(request, auth.session);
 
       let fileBuffer: Buffer | null = null;
@@ -342,6 +346,18 @@ export function torrentRoutes(deps: { db: Db; config: AppConfig }): FastifyPlugi
         }
       }
       if (!user) throw unauthorized();
+
+      let permissions = request.auth?.permissions ?? [];
+      if (!request.auth) {
+        const classRow =
+          user.class_id === null
+            ? await loadClassBySlug(db, "user")
+            : await loadClassById(db, Number(user.class_id));
+        permissions = computePermissions(classRow, await loadOverrides(db, Number(user.id)));
+      }
+      if (!permissions.includes("torrent.download")) {
+        throw new HttpProblem(403, "forbidden", "当前等级不能下载种子");
+      }
 
       const row = await db
         .selectFrom("torrents")

@@ -167,6 +167,9 @@ export function economyRoutes(deps: { db: Db; config: AppConfig }): FastifyPlugi
 
     app.post(`${API_PREFIX}/me/exchange/:key`, async (request, reply) => {
       const auth = requireAuth(request);
+      if (!auth.permissions.includes("bonus.exchange")) {
+        throw forbidden("forbidden", "当前等级不能兑换");
+      }
       assertCsrf(request, auth.session);
 
       const itemKey = (request.params as { key: string }).key;
@@ -306,6 +309,9 @@ export function economyRoutes(deps: { db: Db; config: AppConfig }): FastifyPlugi
 
     app.get(`${API_PREFIX}/me/rss`, async (request) => {
       const auth = requireAuth(request);
+      if (!auth.permissions.includes("rss.read")) {
+        throw forbidden("forbidden", "当前等级不能使用 RSS");
+      }
       return rssResponse.parse({
         url: `${config.baseUrl}/rss?passkey=${auth.user.passkey}`,
       });

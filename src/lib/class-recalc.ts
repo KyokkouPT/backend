@@ -8,6 +8,7 @@ import {
   nextHigherClass,
   parseRule,
   pickHighestEligible,
+  ruleKey,
   type ClassRow,
   type UserMetrics,
 } from "./classes.js";
@@ -379,6 +380,9 @@ export async function runClassRecalc(db: Db, options: RecalcOptions): Promise<Re
         }
         const promoteRule = parseRule(next.promote_rule_json);
         if (!promoteRule || !evaluateRule(promoteRule, metrics)) break;
+
+        // 条件完全相同的等级只自动获得较低的那个，避免一次检查穿过同条件等级。
+        if (ruleKey(promoteRule) === ruleKey(parseRule(cursor.promote_rule_json))) break;
 
         const graceDays = Number(next.promote_grace_days);
         if (graceDays > 0) {

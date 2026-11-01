@@ -387,6 +387,12 @@ export function staffAdminRoutes(deps: { db: Db }): FastifyPluginAsync {
       const target = await db.selectFrom("users").selectAll().where("id", "=", id).executeTakeFirst();
       if (!target) throw notFound("user_not_found", "用户不存在");
       if (Number(target.id) === Number(auth.user.id)) throw badRequest("self_action", "不能对自己执行该操作");
+      if (action === "warn" && !auth.permissions.includes(PERMISSIONS.staffUserWarn)) {
+        throw new HttpProblem(403, "forbidden", "没有警告权限");
+      }
+      if (action !== "warn" && !auth.permissions.includes(PERMISSIONS.staffUserStatus)) {
+        throw new HttpProblem(403, "forbidden", "没有账号状态权限");
+      }
 
       const now = Date.now();
       const nextStatus =

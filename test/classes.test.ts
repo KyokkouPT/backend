@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { API_PREFIX } from "@kyokkou/contracts";
+import { validateCronExpression } from "../src/lib/class-scheduler.js";
 import { createTestContext, login, TEST_PASSWORD, type LoggedIn, type TestContext } from "./helpers.js";
 
 let ctx: TestContext;
@@ -209,5 +210,125 @@ describe("class system", () => {
     });
     expect(runs.statusCode).toBe(200);
     expect((runs.json() as { items: unknown[] }).items.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("validates cron expressions and their minimum interval", () => {
+    expect(validateCronExpression("*/15 * * * *").ok).toBe(true);
+    expect(validateCronExpression("* * * * *").ok).toBe(false);
+    expect(validateCronExpression("not-a-cron").ok).toBe(false);
+  });
+
+  it("stops at the lower level when conditions are identical", async () => {
+    const target = await userId("阿雪");
+    const member = await ctx.db
+      .selectFrom("classes")
+      .select("promote_rule_json")
+      .where("slug", "=", "member")
+      .executeTakeFirstOrThrow();
+    await ctx.db
+      .updateTable("classes")
+      .set({ promote_rule_json: member.promote_rule_json })
+      .where("slug", "=", "advanced")
+      .execute();
+
+    await ctx.app.inject({
+      method: "PUT",
+      url: `${API_PREFIX}/staff/classes/notifications`,
+      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
+      payload: {
+        promote: "欢迎 {username} 来到 {new_class}（{site_name}）",
+        demote: "你被调整为 {new_class}：{reason}",
+        demote_warning: "将在 {date} 调整为 {new_class}",
+      },
+    });
+
+    const userClass = await ctx.db
+      .selectFrom("classes")
+      .select("id")
+      .where("slug", "=", "user")
+      .executeTakeFirstOrThrow();
+    await ctx.db
+      .updateTable("users")
+      .set({
+        class_id: Number(userClass.id),
+        class_key: "user",
+        uploaded: 200 * 1024 ** 3,
+        downloaded: 60 * 1024 ** 3,
+        created_at: Date.now() - 60 * 86_400_000,
+        demote_due_at: null,
+        class_locked_until: null,
+      })
+      .where("id", "=", target)
+      .execute();
+
+    const run = await ctx.app.inject({
+      method: "POST",
+      url: `${API_PREFIX}/staff/classes/recalc`,
+      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
+      payload: {},
+    });
+    expect(run.statusCode).toBe(200);
+
+    const row = await ctx.db
+      .selectFrom("users as u")
+      .innerJoin("classes as c", "c.id", "u.class_id")
+      .select("c.slug")
+      .where("u.id", "=", target)
+      .executeTakeFirstOrThrow();
+    expect(row.slug).toBe("member");
+
+    const notification = await ctx.db
+      .selectFrom("notifications")
+      .select(["title", "body"])
+      .where("user_id", "=", target)
+      .where("title", "=", "等级提升")
+      .orderBy("id", "desc")
+      .executeTakeFirst();
+    expect(notification?.body).toContain("欢迎 阿雪 来到 成员");
+  });
+
+  it("enforces user capability nodes", async () => {
+    const target = await userId("阿雪");
+    const created = await ctx.app.inject({
+      method: "POST",
+      url: `${API_PREFIX}/staff/classes`,
+      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
+      payload: { slug: "no-rights", name: "无权限测试", rank: 5, permissions: [] },
+    });
+    expect(created.statusCode).toBe(201);
+
+    const assigned = await ctx.app.inject({
+      method: "PUT",
+      url: `${API_PREFIX}/staff/users/${String(target)}/class`,
+      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
+      payload: { class_slug: "no-rights" },
+    });
+    expect(assigned.statusCode).toBe(200);
+
+    const download = await ctx.app.inject({
+      method: "GET",
+      url: "/t/1/download",
+      headers: { cookie: member.cookieHeader },
+    });
+    expect(download.statusCode).toBe(403);
+
+    const invite = await ctx.app.inject({
+      method: "POST",
+      url: `${API_PREFIX}/me/invites`,
+      headers: { cookie: member.cookieHeader, "x-csrf-token": member.csrfToken },
+      payload: {},
+    });
+    expect(invite.statusCode).toBe(403);
+
+    const userClass = await ctx.db
+      .selectFrom("classes")
+      .select("id")
+      .where("slug", "=", "user")
+      .executeTakeFirstOrThrow();
+    await ctx.db
+      .updateTable("users")
+      .set({ class_id: Number(userClass.id), class_key: "user" })
+      .where("id", "=", target)
+      .execute();
   });
 });
