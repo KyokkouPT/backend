@@ -1229,6 +1229,40 @@ export const classRule = z.object({
 });
 export type ClassRule = z.infer<typeof classRule>;
 
+/* ============================ Staff 站内信 ============================ */
+
+export const staffMessageBody = z.object({
+  title: z.string().trim().min(1).max(190),
+  body: z.string().trim().min(1).max(5000),
+  link_url: z.string().trim().max(500).nullable().optional(),
+  conditions: classRule.nullable().optional(),
+  class_slugs: z.array(z.string().min(1).max(32)).max(100).optional(),
+  user_ids: z.array(z.number().int().positive()).max(5000).optional(),
+});
+export type StaffMessageBody = z.infer<typeof staffMessageBody>;
+
+export const staffMessageOptions = z.object({
+  classes: z.array(
+    z.object({
+      slug: z.string(),
+      name: z.string(),
+      rank: z.number().int(),
+    }),
+  ),
+});
+export type StaffMessageOptions = z.infer<typeof staffMessageOptions>;
+
+export const staffMessagePreviewResponse = z.object({
+  recipients: z.number().int(),
+  sample: z.array(z.string()),
+});
+export type StaffMessagePreviewResponse = z.infer<typeof staffMessagePreviewResponse>;
+
+export const staffMessageSendResponse = z.object({
+  recipients: z.number().int(),
+});
+export type StaffMessageSendResponse = z.infer<typeof staffMessageSendResponse>;
+
 export const classItem = z.object({
   id: z.number().int(),
   slug: z.string(),
