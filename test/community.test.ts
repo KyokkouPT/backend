@@ -57,7 +57,7 @@ describe("invites", () => {
     });
     expect(created.statusCode).toBe(201);
     const body = created.json() as { code: string; status: string };
-    expect(body.code.length).toBeGreaterThan(5);
+    expect(body.code.length).toBe(32);
     expect(body.status).toBe("unused");
 
     const list = await ctx.app.inject({

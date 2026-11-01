@@ -11,7 +11,7 @@ import { validateUsername } from "../lib/username.js";
 const INVITE_TTL_MS = 30 * 86_400_000;
 
 function newInviteCode(): string {
-  return randomBytes(6).toString("hex").toUpperCase();
+  return randomBytes(16).toString("hex").toUpperCase();
 }
 
 export function inviteRoutes(deps: { db: Db }): FastifyPluginAsync {
