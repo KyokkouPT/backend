@@ -914,3 +914,23 @@ export const setupResponse = z.object({
   csrf_token: z.string(),
 });
 export type SetupResponse = z.infer<typeof setupResponse>;
+
+/* ============================ Staff 用户管理 ============================ */
+
+export const staffCreateUserBody = z.object({
+  username: z.string().min(2).max(64),
+  email: z.string().email().max(190),
+  password: z.string().min(8).max(200),
+  role: role.default("user"),
+  class_key: z.string().min(1).max(32).default("user"),
+});
+export type StaffCreateUserBody = z.infer<typeof staffCreateUserBody>;
+
+export const staffUpdateUserBody = z.object({
+  email: z.string().email().max(190).optional(),
+  role: role.optional(),
+  class_key: z.string().min(1).max(32).optional(),
+  status: userStatus.optional(),
+  password: z.string().min(8).max(200).optional(),
+});
+export type StaffUpdateUserBody = z.infer<typeof staffUpdateUserBody>;

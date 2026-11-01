@@ -1,5 +1,6 @@
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import { sql } from "kysely";
+import { randomBytes } from "node:crypto";
 import {
   API_PREFIX,
   PERMISSIONS,
@@ -11,13 +12,16 @@ import {
   resolveAnomalyBody,
   resolveReportBody,
   staffActionResponse,
+  staffCreateUserBody,
   staffSummaryResponse,
+  staffUpdateUserBody,
   staffUsersResponse,
   type AppealItem,
 } from "@kyokkou/contracts";
 import type { Db } from "../db/db.js";
 import { currentSchemaVersion } from "../db/migrate.js";
 import { assertCsrf, requireAuth } from "../auth/csrf.js";
+import { hashPassword } from "../auth/password.js";
 import { permissionsFor } from "../auth/permissions.js";
 import { deleteAllSessionsOfUser } from "../auth/session.js";
 import { loadAppeals } from "../lib/appeals.js";
@@ -100,6 +104,217 @@ export function staffAdminRoutes(deps: { db: Db }): FastifyPluginAsync {
           created_at: Number(user.created_at),
           last_seen_at: user.last_seen_at === null ? null : Number(user.last_seen_at),
         })),
+      });
+    });
+
+    app.post(`${API_PREFIX}/staff/users`, async (request, reply) => {
+      const auth = requirePerm(request, PERMISSIONS.staffUsers);
+      assertCsrf(request, auth.session);
+      const body = parseOrThrow(staffCreateUserBody, request.body ?? {});
+
+      const username = body.username.trim();
+      const email = body.email.trim().toLowerCase();
+      const existing = await db
+        .selectFrom("users")
+        .select("id")
+        .where((eb) => eb.or([eb("username", "=", username), eb("email", "=", email)]))
+        .executeTakeFirst();
+      if (existing) throw conflict("account_exists", "用户名或邮箱已被使用");
+
+      const now = Date.now();
+      const passwordHash = await hashPassword(body.password);
+      const passkey = randomBytes(16).toString("hex");
+
+      await db.transaction().execute(async (trx) => {
+        await trx
+          .insertInto("users")
+          .values({
+            username,
+            email,
+            password_hash: passwordHash,
+            passkey,
+            role: body.role,
+            class_key: body.class_key,
+            status: "active",
+            uploaded: 0,
+            downloaded: 0,
+            bonus: 0,
+            seedtime: 0,
+            invited_by: null,
+            created_at: now,
+            last_seen_at: null,
+            bonus_frozen_until: null,
+            last_bonus_at: now,
+          })
+          .execute();
+
+        const created = await trx
+          .selectFrom("users")
+          .select("id")
+          .where("username", "=", username)
+          .executeTakeFirstOrThrow();
+
+        await trx
+          .insertInto("user_preferences")
+          .values({
+            user_id: Number(created.id),
+            email_review: 1,
+            email_hnr: 1,
+            email_invite: 1,
+            email_social: 0,
+            email_weekly: 0,
+            public_seeding: 1,
+            public_published: 1,
+            searchable: 1,
+            updated_at: now,
+          })
+          .execute();
+
+        await trx
+          .insertInto("audit_logs")
+          .values({
+            actor_id: Number(auth.user.id),
+            action: "user.create",
+            target_type: "user",
+            target_id: String(created.id),
+            detail_json: JSON.stringify({ role: body.role }),
+            ip: request.ip,
+            created_at: now,
+          })
+          .execute();
+      });
+
+      return reply.status(201).send(
+        staffActionResponse.parse({
+          ok: true,
+          status: "created",
+          message: `已创建用户 ${username}`,
+        }),
+      );
+    });
+
+    app.put(`${API_PREFIX}/staff/users/:id`, async (request) => {
+      const auth = requirePerm(request, PERMISSIONS.staffUsers);
+      assertCsrf(request, auth.session);
+      const id = Number((request.params as { id: string }).id);
+      const body = parseOrThrow(staffUpdateUserBody, request.body ?? {});
+
+      const target = await db.selectFrom("users").selectAll().where("id", "=", id).executeTakeFirst();
+      if (!target) throw notFound("user_not_found", "用户不存在");
+
+      const self = Number(target.id) === Number(auth.user.id);
+      if (self && body.role && body.role !== target.role) {
+        throw badRequest("self_role", "不能修改自己的角色");
+      }
+      if (self && body.status && body.status !== target.status) {
+        throw badRequest("self_status", "不能修改自己的状态");
+      }
+
+      const patch: Record<string, unknown> = {};
+      if (body.email) {
+        const email = body.email.trim().toLowerCase();
+        const exists = await db
+          .selectFrom("users")
+          .select("id")
+          .where("email", "=", email)
+          .where("id", "!=", id)
+          .executeTakeFirst();
+        if (exists) throw conflict("email_taken", "邮箱已被使用");
+        patch.email = email;
+      }
+      if (body.role) patch.role = body.role;
+      if (body.class_key) patch.class_key = body.class_key;
+      if (body.status) patch.status = body.status;
+      if (body.password) patch.password_hash = await hashPassword(body.password);
+
+      const now = Date.now();
+      await db.transaction().execute(async (trx) => {
+        await trx.updateTable("users").set(patch).where("id", "=", id).execute();
+        await trx
+          .insertInto("audit_logs")
+          .values({
+            actor_id: Number(auth.user.id),
+            action: "user.update",
+            target_type: "user",
+            target_id: String(id),
+            detail_json: JSON.stringify({ fields: Object.keys(patch) }),
+            ip: request.ip,
+            created_at: now,
+          })
+          .execute();
+      });
+
+      if (body.status === "suspended" || body.status === "banned" || body.password) {
+        await deleteAllSessionsOfUser(db, id);
+      }
+      if (body.status && body.status !== target.status) {
+        await createNotification(db, {
+          userId: id,
+          kind: "account",
+          title: "账号状态变更",
+          body:
+            body.status === "active"
+              ? "你的账号已恢复正常。"
+              : body.status === "suspended"
+                ? "你的账号已被停用。"
+                : "你的账号已被封禁。",
+          linkUrl: "/appeals",
+        });
+      }
+
+      return staffActionResponse.parse({ ok: true, status: "updated", message: "已保存用户信息" });
+    });
+
+    app.delete(`${API_PREFIX}/staff/users/:id`, async (request) => {
+      const auth = requirePerm(request, PERMISSIONS.staffUsers);
+      assertCsrf(request, auth.session);
+      const id = Number((request.params as { id: string }).id);
+
+      if (id === Number(auth.user.id)) throw badRequest("self_delete", "不能删除自己");
+      const target = await db.selectFrom("users").selectAll().where("id", "=", id).executeTakeFirst();
+      if (!target) throw notFound("user_not_found", "用户不存在");
+
+      const counts = await Promise.all([
+        db.selectFrom("torrents").select((eb) => eb.fn.countAll<number>().as("count")).where("uploader_id", "=", id).executeTakeFirst(),
+        db.selectFrom("snatches").select((eb) => eb.fn.countAll<number>().as("count")).where("user_id", "=", id).executeTakeFirst(),
+        db.selectFrom("invites").select((eb) => eb.fn.countAll<number>().as("count")).where((eb) => eb.or([eb("inviter_id", "=", id), eb("invited_user_id", "=", id)])).executeTakeFirst(),
+        db.selectFrom("requests").select((eb) => eb.fn.countAll<number>().as("count")).where("user_id", "=", id).executeTakeFirst(),
+        db.selectFrom("bonus_ledger").select((eb) => eb.fn.countAll<number>().as("count")).where("user_id", "=", id).executeTakeFirst(),
+        db.selectFrom("redemptions").select((eb) => eb.fn.countAll<number>().as("count")).where("user_id", "=", id).executeTakeFirst(),
+        db.selectFrom("reports").select((eb) => eb.fn.countAll<number>().as("count")).where("reporter_id", "=", id).executeTakeFirst(),
+        db.selectFrom("anomalies").select((eb) => eb.fn.countAll<number>().as("count")).where("user_id", "=", id).executeTakeFirst(),
+        db.selectFrom("appeals").select((eb) => eb.fn.countAll<number>().as("count")).where("user_id", "=", id).executeTakeFirst(),
+      ]);
+      const total = counts.reduce((sum, row) => sum + Number(row?.count ?? 0), 0);
+      if (total > 0) {
+        throw conflict("user_has_data", "该用户仍有关联数据（种子/做种/邀请/账本等），请改用封禁");
+      }
+
+      const now = Date.now();
+      await db.transaction().execute(async (trx) => {
+        await trx.deleteFrom("sessions").where("user_id", "=", id).execute();
+        await trx.deleteFrom("user_preferences").where("user_id", "=", id).execute();
+        await trx.deleteFrom("twofa_recovery_codes").where("user_id", "=", id).execute();
+        await trx.deleteFrom("notifications").where("user_id", "=", id).execute();
+        await trx.deleteFrom("users").where("id", "=", id).execute();
+        await trx
+          .insertInto("audit_logs")
+          .values({
+            actor_id: Number(auth.user.id),
+            action: "user.delete",
+            target_type: "user",
+            target_id: String(id),
+            detail_json: JSON.stringify({ username: target.username }),
+            ip: request.ip,
+            created_at: now,
+          })
+          .execute();
+      });
+
+      return staffActionResponse.parse({
+        ok: true,
+        status: "deleted",
+        message: `已删除用户 ${target.username}`,
       });
     });
 
