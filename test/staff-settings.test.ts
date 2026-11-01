@@ -111,4 +111,48 @@ describe("staff settings", () => {
     });
     expect(missing.statusCode).toBe(404);
   });
+
+  it("creates sections and categories and rejects duplicates", async () => {
+    const create = await ctx.app.inject({
+      method: "POST",
+      url: `${API_PREFIX}/staff/sections`,
+      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
+      payload: { slug: "anime", name: "动画", review_mode: "pre", display_order: 9 },
+    });
+    expect(create.statusCode).toBe(201);
+
+    const duplicate = await ctx.app.inject({
+      method: "POST",
+      url: `${API_PREFIX}/staff/sections`,
+      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
+      payload: { slug: "anime", name: "动画2", review_mode: "pre" },
+    });
+    expect(duplicate.statusCode).toBe(409);
+
+    const category = await ctx.app.inject({
+      method: "POST",
+      url: `${API_PREFIX}/staff/categories`,
+      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
+      payload: { section_slug: "anime", slug: "anime-sub", name: "字幕" },
+    });
+    expect(category.statusCode).toBe(201);
+
+    const list = await ctx.app.inject({
+      method: "GET",
+      url: `${API_PREFIX}/staff/sections`,
+      headers: { cookie: admin.cookieHeader },
+    });
+    const anime = (
+      list.json() as { items: { slug: string; categories: { slug: string }[] }[] }
+    ).items.find((section) => section.slug === "anime");
+    expect(anime?.categories.some((entry) => entry.slug === "anime-sub")).toBe(true);
+
+    const forbidden = await ctx.app.inject({
+      method: "POST",
+      url: `${API_PREFIX}/staff/sections`,
+      headers: { cookie: user.cookieHeader, "x-csrf-token": user.csrfToken },
+      payload: { slug: "nope", name: "nope", review_mode: "pre" },
+    });
+    expect(forbidden.statusCode).toBe(403);
+  });
 });

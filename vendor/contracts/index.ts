@@ -862,6 +862,31 @@ export const updateCategoryBody = z.object({
   display_order: z.number().int().min(0).optional(),
 });
 
+export const createSectionBody = z.object({
+  slug: z
+    .string()
+    .min(1)
+    .max(32)
+    .regex(/^[a-z0-9][a-z0-9-]*$/, "只能使用小写字母、数字与连字符"),
+  name: z.string().min(1).max(64),
+  review_mode: z.string().min(1).max(16).default("pre"),
+  display_order: z.number().int().min(0).optional(),
+  charter: z.string().max(2000).optional(),
+});
+export type CreateSectionBody = z.infer<typeof createSectionBody>;
+
+export const createCategoryBody = z.object({
+  section_slug: z.string().min(1).max(32),
+  slug: z
+    .string()
+    .min(1)
+    .max(32)
+    .regex(/^[a-z0-9][a-z0-9-]*$/, "只能使用小写字母、数字与连字符"),
+  name: z.string().min(1).max(64),
+  display_order: z.number().int().min(0).optional(),
+});
+export type CreateCategoryBody = z.infer<typeof createCategoryBody>;
+
 /* ============================ 首次安装向导 ============================ */
 
 export const setupStatus = z.object({

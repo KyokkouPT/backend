@@ -3,6 +3,9 @@ import { SETTING_KEYS, settingsSchema } from "@kyokkou/config";
 import {
   API_PREFIX,
   PERMISSIONS,
+  createCategoryBody,
+  createSectionBody,
+  staffActionResponse,
   staffSectionsResponse,
   staffSettingsResponse,
   updateCategoryBody,
@@ -13,7 +16,7 @@ import {
 import type { Db } from "../db/db.js";
 import { assertCsrf, requireAuth } from "../auth/csrf.js";
 import { permissionsFor } from "../auth/permissions.js";
-import { HttpProblem, notFound } from "../lib/problem.js";
+import { HttpProblem, conflict, notFound } from "../lib/problem.js";
 import { loadSettings } from "../lib/settings.js";
 import { parseOrThrow } from "../lib/validate.js";
 
@@ -124,6 +127,103 @@ export function staffSettingsRoutes(deps: { db: Db }): FastifyPluginAsync {
       }));
 
       return staffSectionsResponse.parse({ items });
+    });
+
+    app.post(`${API_PREFIX}/staff/sections`, async (request, reply) => {
+      const auth = requireSettings(request);
+      assertCsrf(request, auth.session);
+      const body = parseOrThrow(createSectionBody, request.body ?? {});
+
+      const existing = await db
+        .selectFrom("sections")
+        .select("id")
+        .where("slug", "=", body.slug)
+        .executeTakeFirst();
+      if (existing) throw conflict("section_exists", "分区标识已存在");
+
+      await db
+        .insertInto("sections")
+        .values({
+          slug: body.slug,
+          name: body.name.trim(),
+          display_order: body.display_order ?? 0,
+          review_mode: body.review_mode,
+          config_json: JSON.stringify({ fields: [], charter: body.charter?.trim() ?? "" }),
+        })
+        .execute();
+
+      await db
+        .insertInto("audit_logs")
+        .values({
+          actor_id: Number(auth.user.id),
+          action: "section.create",
+          target_type: "section",
+          target_id: body.slug,
+          detail_json: null,
+          ip: request.ip,
+          created_at: Date.now(),
+        })
+        .execute();
+
+      return reply.status(201).send(
+        staffActionResponse.parse({
+          ok: true,
+          status: "created",
+          message: `已创建分区「${body.name.trim()}」`,
+        }),
+      );
+    });
+
+    app.post(`${API_PREFIX}/staff/categories`, async (request, reply) => {
+      const auth = requireSettings(request);
+      assertCsrf(request, auth.session);
+      const body = parseOrThrow(createCategoryBody, request.body ?? {});
+
+      const section = await db
+        .selectFrom("sections")
+        .select("id")
+        .where("slug", "=", body.section_slug)
+        .executeTakeFirst();
+      if (!section) throw notFound("section_not_found", "分区不存在");
+
+      const existing = await db
+        .selectFrom("categories")
+        .select("id")
+        .where("section_id", "=", Number(section.id))
+        .where("slug", "=", body.slug)
+        .executeTakeFirst();
+      if (existing) throw conflict("category_exists", "该分区下分类已存在");
+
+      await db
+        .insertInto("categories")
+        .values({
+          section_id: Number(section.id),
+          slug: body.slug,
+          name: body.name.trim(),
+          display_order: body.display_order ?? 0,
+        })
+        .execute();
+
+      await db
+        .insertInto("audit_logs")
+        .values({
+          actor_id: Number(auth.user.id),
+          action: "category.create",
+          target_type: "category",
+          target_id: `${body.section_slug}/${body.slug}`,
+          detail_json: null,
+          ip: request.ip,
+          created_at: Date.now(),
+        })
+        .execute();
+
+      return reply.status(201).send(
+        staffActionResponse.parse({
+          ok: true,
+          status: "created",
+          message: `已创建分类「${body.name.trim()}」`,
+        }),
+      );
     });
 
     app.put(`${API_PREFIX}/staff/sections/:slug`, async (request) => {
