@@ -46,7 +46,11 @@ describe("staff settings", () => {
       url: `${API_PREFIX}/staff/settings`,
       headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
       payload: {
-        site: { tagline: "新的副标题", allow_guest_access: false },
+        site: {
+          tagline: "新的副标题",
+          allow_guest_access: false,
+          rules_markdown: "**规则**\n\n- 第一条",
+        },
         registration: { open: true, closed_registration_mode: "message" },
       },
     });
@@ -65,6 +69,10 @@ describe("staff settings", () => {
 
     const publicSite = await ctx.app.inject({ method: "GET", url: `${API_PREFIX}/site` });
     expect((publicSite.json() as { name: string }).name.length).toBeGreaterThan(0);
+
+    const rules = await ctx.app.inject({ method: "GET", url: `${API_PREFIX}/rules` });
+    expect(rules.statusCode).toBe(200);
+    expect((rules.json() as { content: string }).content).toContain("**规则**");
   });
 
   it("rejects invalid settings and non-admin access", async () => {

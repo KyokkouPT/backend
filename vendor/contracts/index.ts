@@ -383,6 +383,7 @@ export const rulesSection = z.object({
 });
 
 export const rulesResponse = z.object({
+  content: z.string(),
   registration: siteRegistration,
   review: z.object({
     auto_approve_trusted: z.boolean(),
@@ -1045,6 +1046,7 @@ export const staffSettings = z.object({
     tagline: z.string().max(160),
     locale: z.string().min(2).max(16),
     allow_guest_access: z.boolean(),
+    rules_markdown: z.string().max(20000),
   }),
   registration: z.object({
     open: z.boolean(),

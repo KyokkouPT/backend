@@ -12,6 +12,7 @@ export const siteSettings = z.object({
   tagline: z.string().max(160),
   locale: z.string().min(2).max(16),
   allow_guest_access: z.boolean().default(true),
+  rules_markdown: z.string().max(20000).default(""),
 });
 
 export const registrationSettings = z.object({
@@ -121,6 +122,7 @@ export const DEFAULT_SETTINGS: Settings = {
     tagline: "通用、可配置、可自部署的私有种子站引擎",
     locale: "zh-CN",
     allow_guest_access: true,
+    rules_markdown: "",
   },
   registration: {
     open: true,

@@ -446,6 +446,7 @@ export function siteRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginAs
       const [settings, sections] = await Promise.all([loadSettings(db), loadSections(db)]);
 
       return rulesResponse.parse({
+        content: settings.site.rules_markdown,
         registration: settings.registration,
         review: settings.review,
         tracker: {
