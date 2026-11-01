@@ -97,6 +97,7 @@ export function staffSettingsRoutes(deps: { db: Db }): FastifyPluginAsync {
         review: { ...current.review, ...(body.review ?? {}) },
         classes: { ...current.classes, ...(body.classes ?? {}) },
         bonus: { ...current.bonus, ...(body.bonus ?? {}) },
+        shop: { ...current.shop, ...(body.shop ?? {}) },
       };
       const validated = settingsSchema.parse(merged);
 

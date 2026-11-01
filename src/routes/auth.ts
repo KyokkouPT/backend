@@ -29,6 +29,13 @@ import { createNotification, unreadNotificationCount } from "../lib/notification
 import { loadSettings } from "../lib/settings.js";
 import { numberCount, toUserSummary } from "../lib/serialize.js";
 import { parseOrThrow } from "../lib/validate.js";
+import { normalizeUsername, validateUsername } from "../lib/username.js";
+
+function usernameOrThrow(raw: string, allowAdmin = false): string {
+  const checked = validateUsername(raw, { allowAdmin });
+  if (!checked.ok) throw badRequest(checked.code, checked.message);
+  return checked.username;
+}
 
 export function authRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginAsync {
   return async (app) => {
@@ -63,11 +70,12 @@ export function authRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginAs
         assertCsrf(request, null);
 
         const identifier = body.username.trim();
+        const identifierLower = identifier.toLowerCase();
         const user = await db
           .selectFrom("users")
           .selectAll()
           .where((eb) =>
-            eb.or([eb("username", "=", identifier), eb("email", "=", identifier.toLowerCase())]),
+            eb.or([eb("username", "=", identifierLower), eb("email", "=", identifierLower)]),
           )
           .executeTakeFirst();
 
@@ -165,7 +173,7 @@ export function authRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginAs
           inviterId = Number(invite.inviter_id);
         }
 
-        const username = body.username.trim();
+        const username = usernameOrThrow(body.username);
         const email = body.email.trim().toLowerCase();
         const existing = await db
           .selectFrom("users")

@@ -148,7 +148,7 @@ describe("auth / csrf", () => {
     await ctx.db
       .updateTable("users")
       .set({ status: "banned" })
-      .where("username", "=", "阿雪")
+      .where("username", "=", "axue")
       .execute();
 
     const csrfRes = await ctx.app.inject({ method: "GET", url: `${API_PREFIX}/auth/csrf` });
@@ -158,12 +158,12 @@ describe("auth / csrf", () => {
       method: "POST",
       url: `${API_PREFIX}/auth/login`,
       headers: { cookie: `kp_csrf=${csrfToken}`, "x-csrf-token": csrfToken },
-      payload: { username: "阿雪", password: TEST_PASSWORD },
+      payload: { username: "axue", password: TEST_PASSWORD },
     });
 
     expect(res.statusCode).toBe(401);
     expect((res.json() as { code: string }).code).toBe("invalid_credentials");
 
-    await ctx.db.updateTable("users").set({ status: "active" }).where("username", "=", "阿雪").execute();
+    await ctx.db.updateTable("users").set({ status: "active" }).where("username", "=", "axue").execute();
   });
 });

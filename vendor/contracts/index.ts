@@ -50,16 +50,24 @@ export const PERMISSIONS = {
   staffReview: "staff.review",
   staffReports: "staff.reports",
   staffUsers: "staff.users",
-  staffUserClass: "staff.user_class",
+  staffUserEditPassword: "staff.user_edit.password",
+  staffUserEditUsername: "staff.user_edit.username",
+  staffUserEditEmail: "staff.user_edit.email",
+  staffUserEditClass: "staff.user_edit.class",
+  staffUserEditStatus: "staff.user_edit.status",
+  staffUserEditBonus: "staff.user_edit.bonus",
+  staffUserEditUploaded: "staff.user_edit.uploaded",
+  staffUserEditDownloaded: "staff.user_edit.downloaded",
+  staffUserEditInviteBalance: "staff.user_edit.invite_balance",
+  staffUserEditWarnings: "staff.user_edit.warnings",
+  staffUserEditCustomTitle: "staff.user_edit.custom_title",
   staffAnomalies: "staff.anomalies",
   staffAudit: "staff.audit",
   staffSettings: "staff.settings",
   staffClasses: "staff.classes",
   staffAppeals: "staff.appeals",
   staffAnnouncement: "staff.announcement",
-  staffUserEdit: "staff.user_edit",
   staffUserWarn: "staff.user_warn",
-  staffUserStatus: "staff.user_status",
   staffInviteView: "staff.invite_view",
   staffIpView: "staff.ip_view",
   staffClassSimulate: "staff.class_simulate",
@@ -738,6 +746,7 @@ export const staffUserItem = z.object({
   class_key: z.string(),
   class: classBrief,
   warnings: z.number().int(),
+  invite_balance: z.number().int(),
   status: userStatus,
   uploaded: z.number(),
   downloaded: z.number(),
@@ -914,6 +923,11 @@ export const staffSettings = z.object({
     next_run_at: z.number().nullable().optional(),
     default_formula: z.string().optional(),
   }),
+  shop: z.object({
+    rename_cooldown_days: z.number().int().min(0).max(3650),
+    username_reserve_days: z.number().int().min(0).max(3650),
+    rename_refund_ratio: z.number().min(0).max(1),
+  }),
 });
 export type StaffSettings = z.infer<typeof staffSettings>;
 
@@ -928,6 +942,7 @@ export const updateStaffSettingsBody = z.object({
   review: staffSettings.shape.review.partial().optional(),
   classes: staffSettings.shape.classes.omit({ next_run_at: true }).partial().optional(),
   bonus: staffSettings.shape.bonus.omit({ next_run_at: true, default_formula: true }).partial().optional(),
+  shop: staffSettings.shape.shop.partial().optional(),
 });
 export type UpdateStaffSettingsBody = z.infer<typeof updateStaffSettingsBody>;
 
@@ -1033,6 +1048,7 @@ export const staffCreateUserBody = z.object({
 export type StaffCreateUserBody = z.infer<typeof staffCreateUserBody>;
 
 export const staffUpdateUserBody = z.object({
+  username: z.string().min(1).max(64).optional(),
   email: z.string().email().max(190).optional(),
   class_slug: z.string().min(1).max(32).optional(),
   status: userStatus.optional(),
@@ -1043,6 +1059,8 @@ export const staffUpdateUserBody = z.object({
   downloaded: z.number().int().min(0).optional(),
   /** 魔力值余额。 */
   bonus: z.number().min(0).optional(),
+  invite_balance: z.number().int().min(0).optional(),
+  warnings: z.number().int().min(0).optional(),
   /** @deprecated 兼容旧客户端；优先使用 class_slug。 */
   role: role.optional(),
   /** @deprecated 兼容旧客户端；优先使用 class_slug。 */

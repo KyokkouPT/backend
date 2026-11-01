@@ -564,7 +564,7 @@ export function classRoutes(deps: { db: Db }): FastifyPluginAsync {
     });
 
     app.put(`${API_PREFIX}/staff/users/:id/class`, async (request) => {
-      const auth = requirePerm(request, PERMISSIONS.staffUserClass);
+      const auth = requirePerm(request, PERMISSIONS.staffUserEditClass);
       assertCsrf(request, auth.session);
       const userId = Number((request.params as { id: string }).id);
       if (userId === Number(auth.user.id)) throw badRequest("self_class", "不能修改自己的等级");
@@ -636,7 +636,7 @@ export function classRoutes(deps: { db: Db }): FastifyPluginAsync {
     });
 
     app.put(`${API_PREFIX}/staff/users/:id/permissions`, async (request) => {
-      const auth = requirePerm(request, PERMISSIONS.staffUserClass);
+      const auth = requirePerm(request, PERMISSIONS.staffUserEditClass);
       assertCsrf(request, auth.session);
       const userId = Number((request.params as { id: string }).id);
       if (userId === Number(auth.user.id)) throw badRequest("self_permissions", "不能修改自己的权限");

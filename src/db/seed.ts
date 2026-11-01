@@ -184,7 +184,7 @@ const USERS: UserSeed[] = [
     seedtime: 0,
   },
   {
-    username: "阿雪",
+    username: "axue",
     email: "axue@example.com",
     role: "user",
     classKey: "user",
@@ -259,7 +259,7 @@ const TORRENTS: TorrentSeed[] = [
     name: "The.Zone.of.Interest.2023.1080p.BluRay.x264-SPARKS",
     section: "movie",
     category: "movie-film",
-    uploader: "阿雪",
+    uploader: "axue",
     size: Math.round(9.8 * GB),
     promo: "none",
     seeders: 41,
@@ -313,7 +313,7 @@ const TORRENTS: TorrentSeed[] = [
     name: "Taylor.Swift.The.Tortured.Poets.Department.2024.FLAC",
     section: "music",
     category: "music-lossless",
-    uploader: "阿雪",
+    uploader: "axue",
     size: Math.round(1.4 * GB),
     promo: "2x",
     seeders: 156,
@@ -762,7 +762,7 @@ export async function seedDatabase(db: Db, options: { password: string }): Promi
       status: "leeching",
     },
     {
-      username: "阿雪",
+      username: "axue",
       infoHash: "6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a",
       uploaded: Math.round(18.2 * GB),
       downloaded: Math.round(1.4 * GB),
@@ -838,7 +838,7 @@ export async function seedDatabase(db: Db, options: { password: string }): Promi
   }
 
   // 社区：通知/隐私偏好、演示邀请码、演示求种
-  for (const username of ["lightbringer", "root", "阿雪"]) {
+  for (const username of ["lightbringer", "root", "axue"]) {
     const userId = userIds.get(username);
     if (userId === undefined) continue;
     const existing = await db
@@ -896,7 +896,7 @@ export async function seedDatabase(db: Db, options: { password: string }): Promi
       bounty: 500,
     },
     {
-      username: "阿雪",
+      username: "axue",
       title: "求 CS61B 2024 春季课程录像",
       description: "含讲义与作业。",
       bounty: 500,
@@ -959,7 +959,7 @@ export async function seedDatabase(db: Db, options: { password: string }): Promi
   }
 
   // 审核 / 申诉演示数据
-  const axueSeedId = userIds.get("阿雪");
+  const axueSeedId = userIds.get("axue");
   const lightSeedId = userIds.get("lightbringer");
   const duneSeedId = torrentIds.get("1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b");
 

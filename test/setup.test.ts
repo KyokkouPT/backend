@@ -35,8 +35,8 @@ describe("setup wizard", () => {
       payload: {
         site_name: "My PT",
         site_tagline: "test site",
-        admin_username: "owner",
-        admin_email: "owner@example.com",
+        admin_username: "admin",
+        admin_email: "admin@example.com",
         admin_password: "owner-pass-123",
         base_sections: true,
         registration_open: true,
@@ -45,7 +45,7 @@ describe("setup wizard", () => {
 
     expect(res.statusCode).toBe(201);
     const body = res.json() as { user: { username: string; role: string } };
-    expect(body.user.username).toBe("owner");
+    expect(body.user.username).toBe("admin");
     expect(body.user.role).toBe("admin");
     expect(setCookieValues(res.headers).get("kp_session")).toBeTruthy();
 
@@ -84,7 +84,7 @@ describe("setup wizard", () => {
       method: "POST",
       url: `${API_PREFIX}/auth/login`,
       headers: { cookie, "x-csrf-token": token },
-      payload: { username: "owner", password: "owner-pass-123" },
+      payload: { username: "admin", password: "owner-pass-123" },
     });
     expect(login.statusCode).toBe(200);
   });

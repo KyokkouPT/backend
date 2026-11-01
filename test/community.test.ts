@@ -18,7 +18,7 @@ beforeAll(async () => {
   ctx = await createTestContext();
   admin = await login(ctx.app, "lightbringer");
   root = await login(ctx.app, "root", TEST_PASSWORD);
-  user = await login(ctx.app, "阿雪", TEST_PASSWORD);
+  user = await login(ctx.app, "axue", TEST_PASSWORD);
 });
 
 afterAll(async () => {
@@ -242,21 +242,21 @@ describe("requests", () => {
       method: "POST",
       url: `${API_PREFIX}/requests/${String(item?.id)}/fulfill`,
       headers: { cookie: user.cookieHeader, "x-csrf-token": user.csrfToken },
-      payload: { username: "阿雪" },
+      payload: { username: "axue" },
     });
     expect(forbidden.statusCode).toBe(403);
 
-    const before = await userRow("阿雪");
+    const before = await userRow("axue");
     const fulfilled = await ctx.app.inject({
       method: "POST",
       url: `${API_PREFIX}/requests/${String(item?.id)}/fulfill`,
       headers: { cookie: root.cookieHeader, "x-csrf-token": root.csrfToken },
-      payload: { username: "阿雪" },
+      payload: { username: "axue" },
     });
     expect(fulfilled.statusCode).toBe(200);
     expect((fulfilled.json() as { status: string }).status).toBe("fulfilled");
 
-    const after = await userRow("阿雪");
+    const after = await userRow("axue");
     expect(Number(after.bonus) - Number(before.bonus)).toBe(500);
 
     const row = await ctx.db

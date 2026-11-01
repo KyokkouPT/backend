@@ -49,7 +49,7 @@ async function userRow(username: string) {
 beforeAll(async () => {
   ctx = await createTestContext();
   await clearPeersForTests(ctx.db);
-  axuePasskey = (await userRow("阿雪")).passkey;
+  axuePasskey = (await userRow("axue")).passkey;
   lightbringerPasskey = (await userRow("lightbringer")).passkey;
 });
 
@@ -82,7 +82,7 @@ describe("tracker announce", () => {
       .innerJoin("users as u", "u.id", "sn.user_id")
       .innerJoin("torrents as t", "t.id", "sn.torrent_id")
       .select(["sn.uploaded", "sn.status"])
-      .where("u.username", "=", "阿雪")
+      .where("u.username", "=", "axue")
       .where("t.info_hash", "=", ZONE_HASH)
       .executeTakeFirst();
 
@@ -92,20 +92,20 @@ describe("tracker announce", () => {
   });
 
   it("never decreases persisted counters", async () => {
-    const before = await userRow("阿雪");
+    const before = await userRow("axue");
 
     await ctx.app.inject({
       method: "GET",
       url: announcePath(axuePasskey, ZONE_HASH, "axue-2", { uploaded: 500, left: 0 }),
     });
-    const afterSmall = await userRow("阿雪");
+    const afterSmall = await userRow("axue");
     expect(Number(afterSmall.uploaded)).toBe(Number(before.uploaded));
 
     await ctx.app.inject({
       method: "GET",
       url: announcePath(axuePasskey, ZONE_HASH, "axue-3", { uploaded: 3000, left: 0 }),
     });
-    const afterBig = await userRow("阿雪");
+    const afterBig = await userRow("axue");
     expect(Number(afterBig.uploaded) - Number(before.uploaded)).toBe(2000);
 
     const snatch = await ctx.db
@@ -113,7 +113,7 @@ describe("tracker announce", () => {
       .innerJoin("torrents as t", "t.id", "sn.torrent_id")
       .select("sn.uploaded")
       .where("t.info_hash", "=", ZONE_HASH)
-      .where("sn.user_id", "=", Number((await userRow("阿雪")).id))
+      .where("sn.user_id", "=", Number((await userRow("axue")).id))
       .executeTakeFirstOrThrow();
     expect(Number(snatch.uploaded)).toBe(3000);
   });
@@ -157,7 +157,7 @@ describe("tracker announce", () => {
       .innerJoin("users as u", "u.id", "h.user_id")
       .innerJoin("torrents as t", "t.id", "h.torrent_id")
       .select(["h.status", "h.required_seconds", "h.seeded_seconds"])
-      .where("u.username", "=", "阿雪")
+      .where("u.username", "=", "axue")
       .where("t.info_hash", "=", ZONE_HASH)
       .executeTakeFirst();
 
@@ -166,7 +166,7 @@ describe("tracker announce", () => {
     const rawRow = await ctx.db
       .selectFrom("users")
       .select(["raw_uploaded", "raw_downloaded"])
-      .where("username", "=", "阿雪")
+      .where("username", "=", "axue")
       .executeTakeFirstOrThrow();
     expect(Number(rawRow.raw_uploaded)).toBeGreaterThanOrEqual(3000);
     expect(Number(rawRow.raw_downloaded)).toBeGreaterThanOrEqual(downloaded);
@@ -175,7 +175,7 @@ describe("tracker announce", () => {
     await ctx.db
       .updateTable("hnr_obligations")
       .set({ seeded_seconds: 999_999 })
-      .where("user_id", "=", Number((await userRow("阿雪")).id))
+      .where("user_id", "=", Number((await userRow("axue")).id))
       .execute();
 
     const changed = await settleHnr(ctx.db);
@@ -185,7 +185,7 @@ describe("tracker announce", () => {
       .selectFrom("hnr_obligations as h")
       .innerJoin("users as u", "u.id", "h.user_id")
       .select("h.status")
-      .where("u.username", "=", "阿雪")
+      .where("u.username", "=", "axue")
       .executeTakeFirstOrThrow();
     expect(settled.status).toBe("reached");
   });

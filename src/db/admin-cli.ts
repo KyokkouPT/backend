@@ -20,7 +20,7 @@ async function main(): Promise<void> {
   try {
     await runMigrations(db, config.databaseDriver);
 
-    const username = (process.env.ADMIN_USERNAME ?? "admin").trim();
+    const username = (process.env.ADMIN_USERNAME ?? "admin").trim().toLowerCase();
     const email = (process.env.ADMIN_EMAIL ?? "").trim().toLowerCase();
     const password = process.env.ADMIN_PASSWORD ?? "";
 

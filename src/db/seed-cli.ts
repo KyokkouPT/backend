@@ -12,7 +12,7 @@ async function main(): Promise<void> {
     await runMigrations(db, config.databaseDriver);
     const summary = await seedDatabase(db, { password: config.seedPassword });
     console.log("seed complete:", summary);
-    console.log("开发账号：lightbringer / root（admin）、阿雪（user）");
+    console.log("开发账号：lightbringer / root（admin）、axue（user）");
     console.log(`密码来自 SEED_PASSWORD（当前长度 ${config.seedPassword.length}）`);
   } finally {
     await db.destroy();

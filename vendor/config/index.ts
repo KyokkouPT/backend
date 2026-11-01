@@ -50,6 +50,12 @@ export const bonusSettings = z.object({
   formula: z.string().min(1).max(2000),
 });
 
+export const shopSettings = z.object({
+  rename_cooldown_days: z.number().int().min(0).max(3650),
+  username_reserve_days: z.number().int().min(0).max(3650),
+  rename_refund_ratio: z.number().min(0).max(1),
+});
+
 export const DEFAULT_BONUS_FORMULA = `perseeding = 1
 maxseeding = 7
 tzero = 4
@@ -77,6 +83,7 @@ export const SETTING_KEYS = [
   "review",
   "classes",
   "bonus",
+  "shop",
 ] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
@@ -88,6 +95,7 @@ export const settingsSchema = z.object({
   review: reviewSettings,
   classes: classesSettings,
   bonus: bonusSettings,
+  shop: shopSettings,
 });
 
 export type SiteSettings = z.infer<typeof siteSettings>;
@@ -97,6 +105,7 @@ export type EconomySettings = z.infer<typeof economySettings>;
 export type ReviewSettings = z.infer<typeof reviewSettings>;
 export type ClassesSettings = z.infer<typeof classesSettings>;
 export type BonusSettings = z.infer<typeof bonusSettings>;
+export type ShopSettings = z.infer<typeof shopSettings>;
 export type Settings = z.infer<typeof settingsSchema>;
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -135,5 +144,10 @@ export const DEFAULT_SETTINGS: Settings = {
   bonus: {
     cron: "0 * * * *",
     formula: DEFAULT_BONUS_FORMULA,
+  },
+  shop: {
+    rename_cooldown_days: 30,
+    username_reserve_days: 30,
+    rename_refund_ratio: 1,
   },
 };

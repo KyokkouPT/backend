@@ -15,7 +15,7 @@ let user: LoggedIn;
 beforeAll(async () => {
   ctx = await createTestContext();
   admin = await login(ctx.app, "lightbringer");
-  user = await login(ctx.app, "阿雪", TEST_PASSWORD);
+  user = await login(ctx.app, "axue", TEST_PASSWORD);
 });
 
 afterAll(async () => {
@@ -95,7 +95,7 @@ describe("staff user management", () => {
     });
     expect((list.json() as { items: unknown[] }).items).toHaveLength(0);
 
-    const axue = await findUser("阿雪");
+    const axue = await findUser("axue");
     const blocked = await ctx.app.inject({
       method: "DELETE",
       url: `${API_PREFIX}/staff/users/${String(axue)}`,
@@ -137,7 +137,7 @@ describe("staff user management", () => {
   });
 
   it("edits counted traffic, bonus and password without touching raw traffic", async () => {
-    const id = await findUser("阿雪");
+    const id = await findUser("axue");
     const before = await ctx.db
       .selectFrom("users")
       .select(["bonus", "raw_uploaded", "raw_downloaded"])
@@ -178,7 +178,7 @@ describe("staff user management", () => {
     expect(ledger).toBeTruthy();
     expect(Number(ledger?.delta)).toBe(999 - Number(before.bonus));
 
-    const relogin = await login(ctx.app, "阿雪", "new-pass-12345");
-    expect(relogin.username).toBe("阿雪");
+    const relogin = await login(ctx.app, "axue", "new-pass-12345");
+    expect(relogin.username).toBe("axue");
   });
 });

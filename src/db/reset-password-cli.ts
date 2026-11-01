@@ -21,7 +21,7 @@ async function main(): Promise<void> {
     return;
   }
 
-  const username = raw.slice(0, separator).trim();
+  const username = raw.slice(0, separator).trim().toLowerCase();
   const password = raw.slice(separator + 1);
   if (!username) {
     console.error("用户名不能为空");

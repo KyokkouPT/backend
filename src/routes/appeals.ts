@@ -12,6 +12,7 @@ import { verifyPassword } from "../auth/password.js";
 import { loadAppeals } from "../lib/appeals.js";
 import { HttpProblem, badRequest, conflict, notFound } from "../lib/problem.js";
 import { parseOrThrow } from "../lib/validate.js";
+import { normalizeUsername } from "../lib/username.js";
 
 export function appealRoutes(deps: { db: Db }): FastifyPluginAsync {
   return async (app) => {
@@ -102,7 +103,7 @@ export function appealRoutes(deps: { db: Db }): FastifyPluginAsync {
       const user = await db
         .selectFrom("users")
         .selectAll()
-        .where("username", "=", body.username.trim())
+        .where("username", "=", normalizeUsername(body.username))
         .where("email", "=", body.email.trim().toLowerCase())
         .executeTakeFirst();
 

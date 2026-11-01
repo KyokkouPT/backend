@@ -5,13 +5,14 @@ import { classBriefOf, loadClassById } from "../lib/classes.js";
 import { notFound } from "../lib/problem.js";
 import { numberCount, ratioFor } from "../lib/serialize.js";
 import { listTorrents } from "../lib/torrent-query.js";
+import { normalizeUsername } from "../lib/username.js";
 
 export function userRoutes(deps: { db: Db }): FastifyPluginAsync {
   return async (app) => {
     const { db } = deps;
 
     app.get(`${API_PREFIX}/users/:name`, async (request) => {
-      const name = (request.params as { name: string }).name;
+      const name = normalizeUsername((request.params as { name: string }).name);
       const user = await db
         .selectFrom("users")
         .selectAll()

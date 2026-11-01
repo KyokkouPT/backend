@@ -10,7 +10,7 @@ let torrentId = 0;
 beforeAll(async () => {
   ctx = await createTestContext();
   admin = await login(ctx.app, "lightbringer");
-  owner = await login(ctx.app, "阿雪", TEST_PASSWORD);
+  owner = await login(ctx.app, "axue", TEST_PASSWORD);
   const torrent = await ctx.db
     .selectFrom("torrents")
     .select("id")

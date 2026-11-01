@@ -43,6 +43,27 @@ export interface AuditLogsTable {
   created_at: number;
 }
 
+export interface UsernameReservationsTable {
+  id: Generated<number>;
+  username: string;
+  user_id: number;
+  reserved_until: number;
+  released_at: number | null;
+  created_at: number;
+}
+
+export interface UsernameChangesTable {
+  id: Generated<number>;
+  user_id: number;
+  old_username: string;
+  new_username: string;
+  price: number;
+  refund_amount: number;
+  item_id: number | null;
+  actor_id: number | null;
+  created_at: number;
+}
+
 export interface JobLeasesTable {
   key: string;
   owner: string;
@@ -84,6 +105,7 @@ export interface UsersTable {
   last_seen_at: number | null;
   bonus_frozen_until: number | null;
   last_bonus_at: number | null;
+  username_changed_at: number | null;
   twofa_secret: string | null;
   twofa_enabled: number | null;
   /** 等级；迁移 008 回填，应用层保证有值。 */
@@ -473,4 +495,6 @@ export interface Database {
   user_class_progress: UserClassProgressTable;
   job_leases: JobLeasesTable;
   peers: PeersTable;
+  username_reservations: UsernameReservationsTable;
+  username_changes: UsernameChangesTable;
 }

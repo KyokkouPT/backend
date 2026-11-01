@@ -85,7 +85,7 @@ seed 开发账号（密码由 `SEED_PASSWORD` 控制，默认 `kyokkou-dev`）�
 ## 数据库与迁移
 
 - 迁移在 `src/db/migrations/NNN_name.ts`，按 `version` 顺序执行，记录在 `schema_migrations`。
-- 当前：001_init 到 013_tracker_peers（011 魔力公式/浮点/零魔；012 调度租约与索引；013 DB 化 Tracker peers）。
+- 当前：001_init 到 015_username_permission_cleanup（011 魔力公式/浮点/零魔；012 调度租约与索引；013 DB 化 Tracker peers；014 用户名规则与颗粒化 user_edit 权限；015 管理组默认字段清理）。
 - SQLite 只支持单实例；多实例必须 MySQL/MariaDB/PostgreSQL，详见 `../docs/23-performance-multi-instance.md`。
 - SQLite / PostgreSQL 的迁移在一个事务里；MySQL/MariaDB 的 DDL 非事务，失败会明确抛错，重试前需人工检查。
 - 主键按方言生成：SQLite `integer primary key autoincrement`、MySQL `bigint auto_increment`、PostgreSQL `bigserial`。

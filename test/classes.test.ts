@@ -10,7 +10,7 @@ let member: LoggedIn;
 beforeAll(async () => {
   ctx = await createTestContext();
   admin = await login(ctx.app, "lightbringer");
-  member = await login(ctx.app, "阿雪", TEST_PASSWORD);
+  member = await login(ctx.app, "axue", TEST_PASSWORD);
 });
 
 afterAll(async () => {
@@ -91,7 +91,7 @@ describe("class system", () => {
   });
 
   it("validates manual class changes", async () => {
-    const target = await userId("阿雪");
+    const target = await userId("axue");
     const promote = await ctx.app.inject({
       method: "PUT",
       url: `${API_PREFIX}/staff/users/${String(target)}/class`,
@@ -118,7 +118,7 @@ describe("class system", () => {
   });
 
   it("does not let personal grants bypass the staff gate", async () => {
-    const target = await userId("阿雪");
+    const target = await userId("axue");
     const saved = await ctx.app.inject({
       method: "PUT",
       url: `${API_PREFIX}/staff/users/${String(target)}/permissions`,
@@ -138,7 +138,7 @@ describe("class system", () => {
   });
 
   it("runs recalc: promotes eligible users and demotes when ratio drops", async () => {
-    const target = await userId("阿雪");
+    const target = await userId("axue");
     const userClass = await ctx.db
       .selectFrom("classes")
       .select("id")
@@ -219,7 +219,7 @@ describe("class system", () => {
   });
 
   it("stops at the lower level when conditions are identical", async () => {
-    const target = await userId("阿雪");
+    const target = await userId("axue");
     const member = await ctx.db
       .selectFrom("classes")
       .select("promote_rule_json")
@@ -284,11 +284,11 @@ describe("class system", () => {
       .where("title", "=", "等级提升")
       .orderBy("id", "desc")
       .executeTakeFirst();
-    expect(notification?.body).toContain("欢迎 阿雪 来到 成员");
+    expect(notification?.body).toContain("欢迎 axue 来到 成员");
   });
 
   it("enforces user capability nodes", async () => {
-    const target = await userId("阿雪");
+    const target = await userId("axue");
     const created = await ctx.app.inject({
       method: "POST",
       url: `${API_PREFIX}/staff/classes`,
@@ -333,7 +333,7 @@ describe("class system", () => {
   });
 
   it("simulates class decisions with granular permissions", async () => {
-    const target = await userId("阿雪");
+    const target = await userId("axue");
 
     const simulation = await ctx.app.inject({
       method: "POST",

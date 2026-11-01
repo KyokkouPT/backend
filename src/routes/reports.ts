@@ -4,6 +4,7 @@ import type { Db } from "../db/db.js";
 import { assertCsrf, requireAuth } from "../auth/csrf.js";
 import { notFound } from "../lib/problem.js";
 import { parseOrThrow } from "../lib/validate.js";
+import { normalizeUsername } from "../lib/username.js";
 
 export function reportRoutes(deps: { db: Db }): FastifyPluginAsync {
   return async (app) => {
@@ -27,7 +28,7 @@ export function reportRoutes(deps: { db: Db }): FastifyPluginAsync {
         const target = await db
           .selectFrom("users")
           .select("username")
-          .where("username", "=", body.target_id)
+          .where("username", "=", normalizeUsername(body.target_id))
           .executeTakeFirst();
         if (!target) throw notFound("target_not_found", "举报对象不存在");
         label = target.username;

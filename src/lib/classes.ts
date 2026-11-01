@@ -159,8 +159,14 @@ export function computePermissions(
   return gateStaffPermissions([...set]);
 }
 
-/** 校验等级配置：有 staff.* 必须有 staff.available。 */
+/** 校验等级配置：有 staff.* 必须有 staff.available；user_edit 只能授予字段子节点。 */
 export function classPermissionError(permissions: string[]): string | null {
+  if (permissions.includes("staff.user_edit")) {
+    return "staff.user_edit 不能独立授予，请勾选具体字段子权限";
+  }
+  if (permissions.includes("staff.user_class") || permissions.includes("staff.user_status")) {
+    return "请使用 staff.user_edit.class / staff.user_edit.status";
+  }
   const hasStaff = permissions.some((permission) => permission.startsWith("staff."));
   if (hasStaff && !permissions.includes(PERMISSIONS.staffAvailable)) {
     return "勾选了 staff.* 权限时必须同时勾选 staff.available";

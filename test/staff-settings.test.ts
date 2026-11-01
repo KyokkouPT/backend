@@ -15,7 +15,7 @@ let user: LoggedIn;
 beforeAll(async () => {
   ctx = await createTestContext();
   admin = await login(ctx.app, "lightbringer");
-  user = await login(ctx.app, "阿雪", TEST_PASSWORD);
+  user = await login(ctx.app, "axue", TEST_PASSWORD);
 });
 
 afterAll(async () => {
@@ -207,7 +207,7 @@ describe("staff settings", () => {
     const userRow = await ctx.db
       .selectFrom("users")
       .select("id")
-      .where("username", "=", "阿雪")
+      .where("username", "=", "axue")
       .executeTakeFirstOrThrow();
     const simulate = await ctx.app.inject({
       method: "POST",
@@ -216,7 +216,7 @@ describe("staff settings", () => {
       payload: { formula: "result = seeders", user_id: Number(userRow.id) },
     });
     expect(simulate.statusCode).toBe(200);
-    expect((simulate.json() as { username: string }).username).toBe("阿雪");
+    expect((simulate.json() as { username: string }).username).toBe("axue");
 
     const forbidden = await ctx.app.inject({
       method: "POST",

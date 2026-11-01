@@ -20,10 +20,11 @@ import {
   cookieOptions,
   createSession,
 } from "../auth/session.js";
-import { HttpProblem, conflict } from "../lib/problem.js";
+import { HttpProblem, badRequest, conflict } from "../lib/problem.js";
 import { loadClassBySlug } from "../lib/classes.js";
 import { toUserSummary } from "../lib/serialize.js";
 import { parseOrThrow } from "../lib/validate.js";
+import { validateUsername } from "../lib/username.js";
 
 /**
  * 首次安装向导：数据库为空（users 为 0）时允许通过 GUI 创建站点与管理员，
@@ -65,7 +66,9 @@ export function setupRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginA
 
         const body = parseOrThrow(setupRequest, request.body ?? {});
 
-        const username = body.admin_username.trim();
+        const checked = validateUsername(body.admin_username, { allowAdmin: true });
+        if (!checked.ok) throw badRequest(checked.code, checked.message);
+        const username = checked.username;
         const email = body.admin_email.trim().toLowerCase();
         const now = Date.now();
         const passwordHash = await hashPassword(body.admin_password);

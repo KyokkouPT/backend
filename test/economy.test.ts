@@ -21,7 +21,7 @@ async function user(username: string) {
 beforeAll(async () => {
   ctx = await createTestContext();
   admin = await login(ctx.app, "lightbringer");
-  axue = await login(ctx.app, "阿雪", TEST_PASSWORD);
+  axue = await login(ctx.app, "axue", TEST_PASSWORD);
 });
 
 afterAll(async () => {
@@ -160,7 +160,7 @@ describe("exchange", () => {
       })
       .execute();
 
-    const before = await user("阿雪");
+    const before = await user("axue");
     const res = await ctx.app.inject({
       method: "POST",
       url: `${API_PREFIX}/me/exchange/discount_5gb`,
@@ -169,7 +169,7 @@ describe("exchange", () => {
     });
     expect(res.statusCode).toBe(200);
 
-    const after = await user("阿雪");
+    const after = await user("axue");
     expect(Number(before.downloaded) - Number(after.downloaded)).toBe(5 * GB);
     expect(Number(after.raw_downloaded)).toBe(Number(before.raw_downloaded));
 
@@ -187,7 +187,7 @@ describe("exchange", () => {
     await ctx.db
       .updateTable("users")
       .set({ bonus_frozen_until: Date.now() + 7 * 86_400_000 })
-      .where("username", "=", "阿雪")
+      .where("username", "=", "axue")
       .execute();
 
     const res = await ctx.app.inject({
@@ -211,7 +211,7 @@ describe("exchange", () => {
     await ctx.db
       .updateTable("users")
       .set({ bonus_frozen_until: null })
-      .where("username", "=", "阿雪")
+      .where("username", "=", "axue")
       .execute();
   });
 });

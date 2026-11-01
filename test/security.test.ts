@@ -19,7 +19,7 @@ beforeAll(async () => {
   ctx = await createTestContext();
   admin = await login(ctx.app, "lightbringer");
   root = await login(ctx.app, "root", TEST_PASSWORD);
-  user = await login(ctx.app, "阿雪", TEST_PASSWORD);
+  user = await login(ctx.app, "axue", TEST_PASSWORD);
 });
 
 afterAll(async () => {
@@ -171,19 +171,19 @@ describe("staff moderation", () => {
     const body = summary.json() as { open_reports: number; anomalies: number; schema_version: number };
     expect(body.open_reports).toBeGreaterThanOrEqual(1);
     expect(body.anomalies).toBeGreaterThanOrEqual(1);
-    expect(body.schema_version).toBe(13);
+    expect(body.schema_version).toBe(15);
 
     const search = await ctx.app.inject({
       method: "GET",
-      url: `${API_PREFIX}/staff/users?q=阿雪`,
+      url: `${API_PREFIX}/staff/users?q=axue`,
       headers: { cookie: admin.cookieHeader },
     });
     expect(search.statusCode).toBe(200);
-    expect((search.json() as { items: { username: string }[] }).items.some((item) => item.username === "阿雪")).toBe(true);
+    expect((search.json() as { items: { username: string }[] }).items.some((item) => item.username === "axue")).toBe(true);
   });
 
   it("warns, suspends, bans and restores a user with session revocation", async () => {
-    const target = await userRow("阿雪");
+    const target = await userRow("axue");
 
     const warn = await ctx.app.inject({
       method: "POST",
@@ -200,7 +200,7 @@ describe("staff moderation", () => {
       payload: {},
     });
     expect(suspend.statusCode).toBe(200);
-    expect((await userRow("阿雪")).status).toBe("suspended");
+    expect((await userRow("axue")).status).toBe("suspended");
 
     const meAfter = await ctx.app.inject({
       method: "GET",
@@ -223,7 +223,7 @@ describe("staff moderation", () => {
       headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
       payload: {},
     });
-    expect((await userRow("阿雪")).status).toBe("active");
+    expect((await userRow("axue")).status).toBe("active");
 
     const audit = await ctx.app.inject({
       method: "GET",
@@ -243,7 +243,7 @@ describe("staff moderation", () => {
   });
 
   it("resolves reports and notifies the reporter", async () => {
-    const freshUser = await login(ctx.app, "阿雪", TEST_PASSWORD);
+    const freshUser = await login(ctx.app, "axue", TEST_PASSWORD);
     const created = await ctx.app.inject({
       method: "POST",
       url: `${API_PREFIX}/reports`,
@@ -320,7 +320,7 @@ describe("appeals", () => {
   });
 
   it("supports public ban appeals and staff restoration", async () => {
-    const target = await userRow("阿雪");
+    const target = await userRow("axue");
     await ctx.db.updateTable("users").set({ status: "banned" }).where("id", "=", target.id).execute();
 
     const { cookie, token } = await csrfPair();
@@ -329,7 +329,7 @@ describe("appeals", () => {
       url: `${API_PREFIX}/appeals/public`,
       headers: { cookie, "x-csrf-token": token },
       payload: {
-        username: "阿雪",
+        username: "axue",
         email: target.email,
         password: TEST_PASSWORD,
         reason: "封禁前没有异常行为，请复核这次封禁。",
@@ -354,11 +354,11 @@ describe("appeals", () => {
       payload: { action: "accept", note: "恢复账号" },
     });
     expect(accept.statusCode).toBe(200);
-    expect((await userRow("阿雪")).status).toBe("active");
+    expect((await userRow("axue")).status).toBe("active");
   });
 
   it("lets a user submit, comment and withdraw an appeal", async () => {
-    const fresh = await login(ctx.app, "阿雪", TEST_PASSWORD);
+    const fresh = await login(ctx.app, "axue", TEST_PASSWORD);
     const created = await ctx.app.inject({
       method: "POST",
       url: `${API_PREFIX}/me/appeals`,

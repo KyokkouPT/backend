@@ -12,6 +12,8 @@ import { migration010 } from "./010_raw_traffic.js";
 import { migration011 } from "./011_bonus_formula.js";
 import { migration012 } from "./012_scheduler_leases.js";
 import { migration013 } from "./013_tracker_peers.js";
+import { migration014 } from "./014_username_rules.js";
+import { migration015 } from "./015_username_permission_cleanup.js";
 
 /** 有序迁移清单；新增迁移只追加，不改历史版本。 */
 export const migrations: Migration[] = [
@@ -28,6 +30,8 @@ export const migrations: Migration[] = [
   migration011,
   migration012,
   migration013,
+  migration014,
+  migration015,
 ];
 
 export const LATEST_SCHEMA_VERSION = migrations.reduce(

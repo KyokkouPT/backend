@@ -41,6 +41,8 @@ describe("migrations", () => {
         { version: 11, name: "bonus_formula" },
         { version: 12, name: "scheduler_leases" },
         { version: 13, name: "tracker_peers" },
+        { version: 14, name: "username_rules" },
+        { version: 15, name: "username_permission_cleanup" },
       ]);
 
       const users = await db.selectFrom("users").selectAll().execute();

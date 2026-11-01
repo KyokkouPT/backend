@@ -20,7 +20,7 @@ beforeAll(async () => {
   const user = await ctx.db
     .selectFrom("users")
     .select(["id", "bonus"])
-    .where("username", "=", "阿雪")
+    .where("username", "=", "axue")
     .executeTakeFirstOrThrow();
   userId = Number(user.id);
   userBonus = Number(user.bonus);

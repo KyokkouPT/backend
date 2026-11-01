@@ -159,7 +159,7 @@ describe("notification email preferences", () => {
     const user = await ctx.db
       .selectFrom("users")
       .selectAll()
-      .where("username", "=", "阿雪")
+      .where("username", "=", "axue")
       .executeTakeFirstOrThrow();
 
     await ctx.db.updateTable("users").set({ status: "banned" }).where("id", "=", user.id).execute();

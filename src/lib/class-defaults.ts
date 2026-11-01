@@ -52,26 +52,41 @@ export const BASE_PERMISSIONS = [
   "class.auto_demote",
 ] as const;
 
+export const USER_EDIT_BASIC_PERMISSIONS = [
+  "staff.user_edit.password",
+  "staff.user_edit.email",
+  "staff.user_edit.bonus",
+  "staff.user_edit.uploaded",
+  "staff.user_edit.downloaded",
+  "staff.user_edit.invite_balance",
+  "staff.user_edit.warnings",
+] as const;
+
+export const USER_EDIT_SENSITIVE_PERMISSIONS = [
+  "staff.user_edit.username",
+  "staff.user_edit.class",
+  "staff.user_edit.status",
+  "staff.user_edit.custom_title",
+] as const;
+
 export const STAFF_PERMISSIONS = [
   "staff.available",
   "staff.access",
   "staff.review",
   "staff.reports",
   "staff.users",
-  "staff.user_class",
   "staff.anomalies",
   "staff.audit",
   "staff.settings",
   "staff.appeals",
   "staff.classes",
   "staff.announcement",
-  "staff.user_edit",
   "staff.user_warn",
-  "staff.user_status",
   "staff.invite_view",
   "staff.ip_view",
   "staff.class_simulate",
   "staff.class_history",
+  ...USER_EDIT_BASIC_PERMISSIONS,
 ] as const;
 
 export const USER_EXTRA_PERMISSIONS = [
@@ -85,6 +100,7 @@ export const USER_EXTRA_PERMISSIONS = [
 export const OWNER_PERMISSIONS = [
   ...BASE_PERMISSIONS,
   ...STAFF_PERMISSIONS,
+  ...USER_EDIT_SENSITIVE_PERMISSIONS,
   ...USER_EXTRA_PERMISSIONS,
   "torrent.auto_approve",
   "torrent.anonymous",

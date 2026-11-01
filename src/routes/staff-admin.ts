@@ -29,6 +29,32 @@ import { createNotification } from "../lib/notifications.js";
 import { HttpProblem, badRequest, conflict, notFound } from "../lib/problem.js";
 import { hueFor, numberCount, ratioFor } from "../lib/serialize.js";
 import { parseOrThrow } from "../lib/validate.js";
+import { normalizeUsername, validateUsername } from "../lib/username.js";
+
+const USER_EDIT_FIELD_PERMISSIONS: Record<string, string> = {
+  username: PERMISSIONS.staffUserEditUsername,
+  email: PERMISSIONS.staffUserEditEmail,
+  password: PERMISSIONS.staffUserEditPassword,
+  class_slug: PERMISSIONS.staffUserEditClass,
+  class_key: PERMISSIONS.staffUserEditClass,
+  status: PERMISSIONS.staffUserEditStatus,
+  bonus: PERMISSIONS.staffUserEditBonus,
+  uploaded: PERMISSIONS.staffUserEditUploaded,
+  downloaded: PERMISSIONS.staffUserEditDownloaded,
+  invite_balance: PERMISSIONS.staffUserEditInviteBalance,
+  warnings: PERMISSIONS.staffUserEditWarnings,
+};
+
+function assertUserEditFields(
+  auth: ReturnType<typeof requirePerm>,
+  body: Record<string, unknown>,
+): void {
+  for (const [field, permission] of Object.entries(USER_EDIT_FIELD_PERMISSIONS)) {
+    if (body[field] !== undefined && !auth.permissions.includes(permission)) {
+      throw new HttpProblem(403, "forbidden_field", `没有修改 ${field} 的权限`);
+    }
+  }
+}
 
 function requirePerm(request: FastifyRequest, permission: string) {
   const auth = requireAuth(request);
@@ -111,6 +137,7 @@ export function staffAdminRoutes(deps: { db: Db }): FastifyPluginAsync {
             class_key: classRow?.slug ?? user.class_key,
             class: classBriefOf(classRow, user.class_key, user.class_key),
             warnings: Number(user.warnings ?? 0),
+            invite_balance: Number(user.invite_balance ?? 0),
             status: user.status,
             uploaded: Number(user.uploaded),
             downloaded: Number(user.downloaded),
@@ -130,7 +157,11 @@ export function staffAdminRoutes(deps: { db: Db }): FastifyPluginAsync {
       assertCsrf(request, auth.session);
       const body = parseOrThrow(staffCreateUserBody, request.body ?? {});
 
-      const username = body.username.trim();
+      const checkedUsername = validateUsername(body.username, {
+        allowAdmin: auth.permissions.includes(PERMISSIONS.staffUserEditUsername),
+      });
+      if (!checkedUsername.ok) throw badRequest(checkedUsername.code, checkedUsername.message);
+      const username = checkedUsername.username;
       const email = body.email.trim().toLowerCase();
       const existing = await db
         .selectFrom("users")
@@ -231,6 +262,7 @@ export function staffAdminRoutes(deps: { db: Db }): FastifyPluginAsync {
 
       const target = await db.selectFrom("users").selectAll().where("id", "=", id).executeTakeFirst();
       if (!target) throw notFound("user_not_found", "用户不存在");
+      assertUserEditFields(auth, body as unknown as Record<string, unknown>);
 
       const self = Number(target.id) === Number(auth.user.id);
       if (self && body.role && body.role !== target.role) {
@@ -241,6 +273,23 @@ export function staffAdminRoutes(deps: { db: Db }): FastifyPluginAsync {
       }
 
       const patch: Record<string, unknown> = {};
+      let usernameChange: { old: string; next: string } | null = null;
+      if (body.username !== undefined) {
+        const checkedUsername = validateUsername(body.username, { allowAdmin: true });
+        if (!checkedUsername.ok) throw badRequest(checkedUsername.code, checkedUsername.message);
+        if (checkedUsername.username !== target.username) {
+          const exists = await db
+            .selectFrom("users")
+            .select("id")
+            .where("username", "=", checkedUsername.username)
+            .where("id", "!=", id)
+            .executeTakeFirst();
+          if (exists) throw conflict("username_taken", "用户名已被使用");
+          patch.username = checkedUsername.username;
+          patch.username_changed_at = Date.now();
+          usernameChange = { old: target.username, next: checkedUsername.username };
+        }
+      }
       let newClass: Awaited<ReturnType<typeof loadClassBySlug>> = null;
       const classSlug = body.class_slug?.trim() || body.class_key?.trim();
       if (classSlug) {
@@ -275,6 +324,8 @@ export function staffAdminRoutes(deps: { db: Db }): FastifyPluginAsync {
       if (body.password) patch.password_hash = await hashPassword(body.password);
       if (body.uploaded !== undefined) patch.uploaded = body.uploaded;
       if (body.downloaded !== undefined) patch.downloaded = body.downloaded;
+      if (body.invite_balance !== undefined) patch.invite_balance = body.invite_balance;
+      if (body.warnings !== undefined) patch.warnings = body.warnings;
       let bonusDelta: number | null = null;
       if (body.bonus !== undefined) {
         patch.bonus = body.bonus;
@@ -299,6 +350,33 @@ export function staffAdminRoutes(deps: { db: Db }): FastifyPluginAsync {
               ref_type: "staff_adjust",
               ref_id: String(auth.user.id),
               note: `Staff 调整（${auth.user.username}）`,
+              created_at: now,
+            })
+            .execute();
+        }
+        if (usernameChange) {
+          await trx
+            .insertInto("username_changes")
+            .values({
+              user_id: id,
+              old_username: usernameChange.old,
+              new_username: usernameChange.next,
+              price: 0,
+              refund_amount: 0,
+              item_id: null,
+              actor_id: Number(auth.user.id),
+              created_at: now,
+            })
+            .execute();
+          await trx
+            .insertInto("audit_logs")
+            .values({
+              actor_id: Number(auth.user.id),
+              action: "user.username_change",
+              target_type: "user",
+              target_id: String(id),
+              detail_json: JSON.stringify(usernameChange),
+              ip: request.ip,
               created_at: now,
             })
             .execute();
@@ -416,7 +494,7 @@ export function staffAdminRoutes(deps: { db: Db }): FastifyPluginAsync {
       if (action === "warn" && !auth.permissions.includes(PERMISSIONS.staffUserWarn)) {
         throw new HttpProblem(403, "forbidden", "没有警告权限");
       }
-      if (action !== "warn" && !auth.permissions.includes(PERMISSIONS.staffUserStatus)) {
+      if (action !== "warn" && !auth.permissions.includes(PERMISSIONS.staffUserEditStatus)) {
         throw new HttpProblem(403, "forbidden", "没有账号状态权限");
       }
 

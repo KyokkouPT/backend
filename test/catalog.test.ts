@@ -55,7 +55,7 @@ function uploadHeaders(session: LoggedIn, contentType: string): Record<string, s
 beforeAll(async () => {
   ctx = await createTestContext();
   admin = await login(ctx.app, "lightbringer");
-  user = await login(ctx.app, "阿雪", TEST_PASSWORD);
+  user = await login(ctx.app, "axue", TEST_PASSWORD);
 });
 
 afterAll(async () => {

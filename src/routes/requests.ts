@@ -10,6 +10,7 @@ import type { Db } from "../db/db.js";
 import { assertCsrf, requireAuth } from "../auth/csrf.js";
 import { createNotification } from "../lib/notifications.js";
 import { HttpProblem, badRequest, conflict, forbidden, notFound } from "../lib/problem.js";
+import { normalizeUsername } from "../lib/username.js";
 import { parseOrThrow } from "../lib/validate.js";
 import { hueFor } from "../lib/serialize.js";
 import { loadSettings } from "../lib/settings.js";
@@ -228,7 +229,7 @@ export function requestRoutes(deps: { db: Db }): FastifyPluginAsync {
       const target = await db
         .selectFrom("users")
         .select(["id", "username", "status"])
-        .where("username", "=", body.username.trim())
+        .where("username", "=", normalizeUsername(body.username))
         .executeTakeFirst();
       if (!target || target.status !== "active") throw notFound("user_not_found", "交付者不存在");
       if (Number(target.id) === Number(row.user_id)) {
