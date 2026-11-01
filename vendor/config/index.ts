@@ -54,6 +54,9 @@ export const shopSettings = z.object({
   rename_cooldown_days: z.number().int().min(0).max(3650),
   username_reserve_days: z.number().int().min(0).max(3650),
   rename_refund_ratio: z.number().min(0).max(1),
+  gift_max_per_transaction: z.number().int().min(-1).default(10000),
+  gift_message_max_length: z.number().int().min(0).max(2000).default(200),
+  hnr_credit_expire_days: z.number().int().min(-1).max(3650).default(-1),
 });
 
 export const DEFAULT_BONUS_FORMULA = `perseeding = 1
@@ -149,5 +152,8 @@ export const DEFAULT_SETTINGS: Settings = {
     rename_cooldown_days: 30,
     username_reserve_days: 30,
     rename_refund_ratio: 1,
+    gift_max_per_transaction: 10000,
+    gift_message_max_length: 200,
+    hnr_credit_expire_days: -1,
   },
 };

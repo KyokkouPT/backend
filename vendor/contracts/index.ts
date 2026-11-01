@@ -50,6 +50,7 @@ export const PERMISSIONS = {
   staffReview: "staff.review",
   staffReports: "staff.reports",
   staffUsers: "staff.users",
+  staffBonusShop: "staff.bonus_shop",
   staffUserEditPassword: "staff.user_edit.password",
   staffUserEditUsername: "staff.user_edit.username",
   staffUserEditEmail: "staff.user_edit.email",
@@ -340,6 +341,7 @@ export const hnrItem = z.object({
   required_seconds: z.number().int(),
   seeded_seconds: z.number().int(),
   status: z.string(),
+  resolved_at: z.number().nullable(),
 });
 
 export const snatchItem = z.object({
@@ -360,6 +362,7 @@ export const meResponse = z.object({
     published: z.number().int(),
   }),
   hnr: z.array(hnrItem),
+  hnr_credits: z.number().int(),
   snatches: z.array(snatchItem),
   rss_url: z.string(),
   bonus_yield_per_hour: z.number(),
@@ -520,15 +523,44 @@ export const ledgerEntry = z.object({
 });
 export type LedgerEntry = z.infer<typeof ledgerEntry>;
 
+export const exchangeDirection = z.enum(["buy", "sell"]);
+export type ExchangeDirection = z.infer<typeof exchangeDirection>;
+
+export const exchangeType = z.enum([
+  "upload_add",
+  "download_add",
+  "download_reduce",
+  "invite_add",
+  "title_set",
+  "gift_bonus",
+  "username_change",
+  "hnr_clear",
+  "invite_sell",
+  "upload_sell",
+]);
+export type ExchangeType = z.infer<typeof exchangeType>;
+
+export const exchangeRequirement = z.enum(["title", "recipient", "message", "username"]);
+export type ExchangeRequirement = z.infer<typeof exchangeRequirement>;
+
 export const exchangeItem = z.object({
   key: z.string(),
   name: z.string(),
   description: z.string().nullable(),
+  direction: exchangeDirection,
+  type: exchangeType,
+  amount: z.number().nullable(),
+  params: z.record(z.string(), z.unknown()),
+  requires: z.array(exchangeRequirement),
   price: z.number(),
   inventory: z.number().nullable(),
   limit_per_user: z.number().nullable(),
+  remaining: z.number().int().nullable(),
+  user_remaining: z.number().int().nullable(),
+  affordable: z.boolean(),
   enabled: z.boolean(),
-  payload_type: z.string(),
+  display_order: z.number().int(),
+  min_class_rank: z.number().int().nullable(),
 });
 export type ExchangeItem = z.infer<typeof exchangeItem>;
 
@@ -541,13 +573,96 @@ export const bonusResponse = z.object({
 });
 export type BonusResponse = z.infer<typeof bonusResponse>;
 
+export const exchangeBody = z.object({
+  params: z.record(z.string(), z.unknown()).optional(),
+  idempotency_key: z.string().max(64).optional(),
+});
+export type ExchangeBody = z.infer<typeof exchangeBody>;
+
 export const exchangeResponse = z.object({
   ok: z.boolean(),
   balance: z.number(),
   item_key: z.string(),
+  redemption_id: z.number().int(),
+  status: z.enum(["completed"]),
   message: z.string(),
 });
 export type ExchangeResponse = z.infer<typeof exchangeResponse>;
+
+export const redemptionItem = z.object({
+  id: z.number().int(),
+  item_id: z.number().int(),
+  item_key: z.string().nullable(),
+  type: z.string(),
+  status: z.enum(["completed", "failed"]),
+  price: z.number(),
+  params: z.record(z.string(), z.unknown()),
+  actor: z.string().nullable(),
+  created_at: z.number(),
+});
+export type RedemptionItem = z.infer<typeof redemptionItem>;
+
+export const redemptionsResponse = z.object({ items: z.array(redemptionItem) });
+export type RedemptionsResponse = z.infer<typeof redemptionsResponse>;
+
+export const hnrCreditsResponse = z.object({
+  credits: z.number().int(),
+  next_expires_at: z.number().nullable(),
+});
+export type HnrCreditsResponse = z.infer<typeof hnrCreditsResponse>;
+
+export const clearHnrResponse = z.object({
+  ok: z.literal(true),
+  credits: z.number().int(),
+  message: z.string(),
+});
+export type ClearHnrResponse = z.infer<typeof clearHnrResponse>;
+
+export const staffExchangeItem = z.object({
+  id: z.number().int(),
+  key: z.string(),
+  name: z.string(),
+  description: z.string().nullable(),
+  direction: exchangeDirection,
+  type: z.string(),
+  amount: z.number().nullable(),
+  params: z.record(z.string(), z.unknown()),
+  price: z.number(),
+  inventory: z.number().nullable(),
+  limit_per_user: z.number().nullable(),
+  enabled: z.boolean(),
+  display_order: z.number().int(),
+  min_class_rank: z.number().int().nullable(),
+  used: z.number().int(),
+  remaining: z.number().int().nullable(),
+});
+export type StaffExchangeItem = z.infer<typeof staffExchangeItem>;
+
+export const staffExchangeItemsResponse = z.object({ items: z.array(staffExchangeItem) });
+export type StaffExchangeItemsResponse = z.infer<typeof staffExchangeItemsResponse>;
+
+const staffExchangeBaseBody = z.object({
+  name: z.string().min(1).max(128),
+  description: z.string().max(500).nullable().optional(),
+  direction: exchangeDirection,
+  type: exchangeType,
+  amount: z.number().int().positive().nullable().optional(),
+  price: z.number().min(0),
+  params: z.record(z.string(), z.unknown()).optional(),
+  inventory: z.number().int().positive().nullable().optional(),
+  limit_per_user: z.number().int().positive().nullable().optional(),
+  enabled: z.boolean().optional(),
+  display_order: z.number().int().optional(),
+  min_class_rank: z.number().int().min(0).nullable().optional(),
+});
+
+export const staffExchangeItemCreateBody = staffExchangeBaseBody.extend({
+  key: z.string().min(2).max(64).regex(/^[a-z0-9_]+$/),
+});
+export type StaffExchangeItemCreateBody = z.infer<typeof staffExchangeItemCreateBody>;
+
+export const staffExchangeItemUpdateBody = staffExchangeBaseBody;
+export type StaffExchangeItemUpdateBody = z.infer<typeof staffExchangeItemUpdateBody>;
 
 export const ledgerResponse = z.object({ items: z.array(ledgerEntry) });
 export type LedgerResponse = z.infer<typeof ledgerResponse>;
@@ -676,6 +791,7 @@ export const userProfile = z.object({
   published_count: z.number().int(),
   seeding_count: z.number().int().nullable(),
   published_visible: z.boolean(),
+  custom_title: z.string().nullable(),
   published: z.array(torrentSummary),
 });
 export type UserProfile = z.infer<typeof userProfile>;
@@ -747,6 +863,7 @@ export const staffUserItem = z.object({
   class: classBrief,
   warnings: z.number().int(),
   invite_balance: z.number().int(),
+  custom_title: z.string().nullable(),
   status: userStatus,
   uploaded: z.number(),
   downloaded: z.number(),
@@ -927,6 +1044,9 @@ export const staffSettings = z.object({
     rename_cooldown_days: z.number().int().min(0).max(3650),
     username_reserve_days: z.number().int().min(0).max(3650),
     rename_refund_ratio: z.number().min(0).max(1),
+    gift_max_per_transaction: z.number().int().min(-1),
+    gift_message_max_length: z.number().int().min(0).max(2000),
+    hnr_credit_expire_days: z.number().int().min(-1).max(3650),
   }),
 });
 export type StaffSettings = z.infer<typeof staffSettings>;
@@ -1061,6 +1181,7 @@ export const staffUpdateUserBody = z.object({
   bonus: z.number().min(0).optional(),
   invite_balance: z.number().int().min(0).optional(),
   warnings: z.number().int().min(0).optional(),
+  custom_title: z.string().max(64).nullable().optional(),
   /** @deprecated 兼容旧客户端；优先使用 class_slug。 */
   role: role.optional(),
   /** @deprecated 兼容旧客户端；优先使用 class_slug。 */

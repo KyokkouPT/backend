@@ -113,6 +113,7 @@ export interface UsersTable {
   warnings: number;
   invite_balance: number;
   class_locked_until: number | null;
+  custom_title: string | null;
   demote_due_at: number | null;
 }
 
@@ -340,6 +341,11 @@ export interface ExchangeItemsTable {
   enabled: number;
   payload_json: string;
   display_order: number;
+  direction: string;
+  type: string | null;
+  amount: number | null;
+  params_json: string | null;
+  min_class_rank: number | null;
 }
 
 export interface RedemptionsTable {
@@ -349,6 +355,20 @@ export interface RedemptionsTable {
   price: number;
   status: string;
   idempotency_key: string | null;
+  created_at: number;
+  type: string | null;
+  params_json: string | null;
+  actor_id: number | null;
+  item_key: string | null;
+}
+
+export interface UserCreditsTable {
+  id: Generated<number>;
+  user_id: number;
+  kind: string;
+  quantity: number;
+  expires_at: number | null;
+  source_redemption_id: number | null;
   created_at: number;
 }
 
@@ -497,4 +517,5 @@ export interface Database {
   peers: PeersTable;
   username_reservations: UsernameReservationsTable;
   username_changes: UsernameChangesTable;
+  user_credits: UserCreditsTable;
 }

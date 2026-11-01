@@ -22,6 +22,31 @@ beforeAll(async () => {
   ctx = await createTestContext();
   admin = await login(ctx.app, "lightbringer");
   axue = await login(ctx.app, "axue", TEST_PASSWORD);
+  for (const [key, name, price, amount, order] of [
+    ["upload_10gb", "10 GB 上传量", 5000, 10 * GB, 0],
+    ["upload_50gb", "50 GB 上传量", 20000, 50 * GB, 1],
+    ["upload_100gb", "100 GB 上传量", 36000, 100 * GB, 2],
+  ] as const) {
+    await ctx.db
+      .insertInto("exchange_items")
+      .values({
+        key,
+        name,
+        description: null,
+        price,
+        inventory: null,
+        limit_per_user: null,
+        enabled: 1,
+        payload_json: "{}",
+        display_order: order,
+        direction: "buy",
+        type: "upload_add",
+        amount,
+        params_json: null,
+        min_class_rank: null,
+      })
+      .execute();
+  }
 });
 
 afterAll(async () => {
@@ -143,6 +168,11 @@ describe("exchange", () => {
         enabled: 1,
         payload_json: JSON.stringify({ type: "download_discount", amount: 5 * GB }),
         display_order: 98,
+        direction: "buy",
+        type: "download_reduce",
+        amount: 5 * GB,
+        params_json: null,
+        min_class_rank: null,
       })
       .execute();
     await ctx.db
@@ -157,6 +187,11 @@ describe("exchange", () => {
         enabled: 1,
         payload_json: JSON.stringify({ type: "download_discount", amount: 100 * GB }),
         display_order: 99,
+        direction: "buy",
+        type: "download_reduce",
+        amount: 100 * GB,
+        params_json: null,
+        min_class_rank: null,
       })
       .execute();
 

@@ -83,6 +83,7 @@ export function userRoutes(deps: { db: Db }): FastifyPluginAsync {
         published_count: numberCount(publishedCount),
         seeding_count: seedingCount,
         published_visible: publishedVisible,
+        custom_title: user.custom_title ?? null,
         published,
       });
     });

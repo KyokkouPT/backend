@@ -694,55 +694,7 @@ export async function seedDatabase(db: Db, options: { password: string }): Promi
       .execute();
   }
 
-  const exchangeSeeds = [
-    {
-      key: "upload_10gb",
-      name: "10 GB 上传量",
-      description: "把 10 GB 上传量加到账号。",
-      price: 5000,
-      amount: 10 * GB,
-      display_order: 0,
-    },
-    {
-      key: "upload_50gb",
-      name: "50 GB 上传量",
-      description: "把 50 GB 上传量加到账号。",
-      price: 20000,
-      amount: 50 * GB,
-      display_order: 1,
-    },
-    {
-      key: "upload_100gb",
-      name: "100 GB 上传量",
-      description: "把 100 GB 上传量加到账号。",
-      price: 36000,
-      amount: 100 * GB,
-      display_order: 2,
-    },
-  ];
-  for (const item of exchangeSeeds) {
-    const existing = await db
-      .selectFrom("exchange_items")
-      .select("id")
-      .where("key", "=", item.key)
-      .executeTakeFirst();
-    if (!existing) {
-      await db
-        .insertInto("exchange_items")
-        .values({
-          key: item.key,
-          name: item.name,
-          description: item.description,
-          price: item.price,
-          inventory: null,
-          limit_per_user: null,
-          enabled: 1,
-          payload_json: JSON.stringify({ type: "upload", amount: item.amount }),
-          display_order: item.display_order,
-        })
-        .execute();
-    }
-  }
+  // 商店初始为空；兑换项由拥有 staff.bonus_shop 的管理员创建。
 
   const snatchSeeds = [
     {

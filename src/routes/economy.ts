@@ -1,9 +1,15 @@
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
+import { sql } from "kysely";
 import {
   API_PREFIX,
   bonusResponse,
+  clearHnrResponse,
+  exchangeBody,
   exchangeResponse,
+  hnrCreditsResponse,
   ledgerResponse,
+  redemptionItem,
+  redemptionsResponse,
   rssResponse,
   type ExchangeItem,
   type LedgerEntry,
@@ -13,9 +19,11 @@ import type { Db } from "../db/db.js";
 import { assertCsrf, requireAuth } from "../auth/csrf.js";
 import { evaluateBonusRate } from "../lib/bonus.js";
 import { signDownHash } from "../lib/downhash.js";
+import { performExchange, parseParams, toExchangeItemView } from "../lib/exchange.js";
 import { badRequest, conflict, forbidden, notFound } from "../lib/problem.js";
 import { loadSettings } from "../lib/settings.js";
 import { listTorrents, type TorrentSort } from "../lib/torrent-query.js";
+import { parseOrThrow } from "../lib/validate.js";
 
 const SORTS = new Set<TorrentSort>(["added_desc", "seeders_desc", "size_desc", "completed_desc"]);
 
@@ -37,33 +45,34 @@ function toLedgerEntry(row: {
   };
 }
 
-function toExchangeItem(row: {
-  key: string;
-  name: string;
-  description: string | null;
-  price: number;
-  inventory: number | null;
-  limit_per_user: number | null;
-  enabled: number;
-  payload_json: string;
-}): ExchangeItem {
-  let payloadType = "unknown";
-  try {
-    const payload = JSON.parse(row.payload_json) as { type?: unknown };
-    if (typeof payload.type === "string") payloadType = payload.type;
-  } catch {
-    /* 保持 unknown */
-  }
-
+async function loadHnrCredits(
+  db: Db,
+  userId: number,
+): Promise<{ credits: number; next_expires_at: number | null }> {
+  const now = Date.now();
+  const [total, next] = await Promise.all([
+    db
+      .selectFrom("user_credits")
+      .select((eb) => eb.fn.sum<number>("quantity").as("credits"))
+      .where("user_id", "=", userId)
+      .where("kind", "=", "hnr_clear")
+      .where("quantity", ">", 0)
+      .where((eb) => eb.or([eb("expires_at", "is", null), eb("expires_at", ">", now)]))
+      .executeTakeFirst(),
+    db
+      .selectFrom("user_credits")
+      .select("expires_at")
+      .where("user_id", "=", userId)
+      .where("kind", "=", "hnr_clear")
+      .where("quantity", ">", 0)
+      .where("expires_at", "is not", null)
+      .where("expires_at", ">", now)
+      .orderBy("expires_at", "asc")
+      .executeTakeFirst(),
+  ]);
   return {
-    key: row.key,
-    name: row.name,
-    description: row.description,
-    price: Number(row.price),
-    inventory: row.inventory === null ? null : Number(row.inventory),
-    limit_per_user: row.limit_per_user === null ? null : Number(row.limit_per_user),
-    enabled: Number(row.enabled) === 1,
-    payload_type: payloadType,
+    credits: Number(total?.credits ?? 0),
+    next_expires_at: next?.expires_at === null || next?.expires_at === undefined ? null : Number(next.expires_at),
   };
 }
 
@@ -125,13 +134,14 @@ export function economyRoutes(deps: { db: Db; config: AppConfig }): FastifyPlugi
 
     app.get(`${API_PREFIX}/me/bonus`, async (request) => {
       const auth = requireAuth(request);
+      const userId = Number(auth.user.id);
       const bonusRate = await evaluateBonusRate(db, auth.user);
 
-      const [ledgerRows, itemRows] = await Promise.all([
+      const [ledgerRows, itemRows, usedRows, userUsedRows] = await Promise.all([
         db
           .selectFrom("bonus_ledger")
           .selectAll()
-          .where("user_id", "=", Number(auth.user.id))
+          .where("user_id", "=", userId)
           .orderBy("created_at", "desc")
           .limit(20)
           .execute(),
@@ -139,16 +149,46 @@ export function economyRoutes(deps: { db: Db; config: AppConfig }): FastifyPlugi
           .selectFrom("exchange_items")
           .selectAll()
           .where("enabled", "=", 1)
+          .where("type", "is not", null)
           .orderBy("display_order", "asc")
           .execute(),
+        db
+          .selectFrom("redemptions")
+          .select(["item_id"])
+          .select((eb) => eb.fn.countAll<number>().as("count"))
+          .where("status", "=", "completed")
+          .groupBy("item_id")
+          .execute(),
+        db
+          .selectFrom("redemptions")
+          .select(["item_id"])
+          .select((eb) => eb.fn.countAll<number>().as("count"))
+          .where("status", "=", "completed")
+          .where("user_id", "=", userId)
+          .groupBy("item_id")
+          .execute(),
       ]);
+      const usedById = new Map(usedRows.map((row) => [Number(row.item_id), Number(row.count)]));
+      const userUsedById = new Map(
+        userUsedRows.map((row) => [Number(row.item_id), Number(row.count)]),
+      );
+      const items = itemRows
+        .map((row) =>
+          toExchangeItemView(row, {
+            balance: Number(auth.user.bonus),
+            user: auth.user,
+            used: usedById.get(Number(row.id)) ?? 0,
+            userUsed: userUsedById.get(Number(row.id)) ?? 0,
+          }),
+        )
+        .filter((item): item is ExchangeItem => item !== null);
 
       return bonusResponse.parse({
         balance: Number(auth.user.bonus),
         yield_per_hour: bonusRate.rate,
         frozen_until: bonusRate.frozen ? auth.user.bonus_frozen_until : null,
         ledger: ledgerRows.map(toLedgerEntry),
-        items: itemRows.map(toExchangeItem),
+        items,
       });
     });
 
@@ -165,168 +205,167 @@ export function economyRoutes(deps: { db: Db; config: AppConfig }): FastifyPlugi
       return ledgerResponse.parse({ items: rows.map(toLedgerEntry) });
     });
 
-    app.post(`${API_PREFIX}/me/exchange/:key`, async (request, reply) => {
+    app.post(`${API_PREFIX}/me/exchange/:key`, async (request) => {
       const auth = requireAuth(request);
       if (!auth.permissions.includes("bonus.exchange")) {
         throw forbidden("forbidden", "当前等级不能兑换");
       }
       assertCsrf(request, auth.session);
-
-      const itemKey = (request.params as { key: string }).key;
+      const body = parseOrThrow(exchangeBody, request.body ?? {});
       const headerValue = request.headers["idempotency-key"];
       const idempotencyKey =
-        typeof headerValue === "string" && headerValue.length > 0
-          ? headerValue.slice(0, 64)
-          : null;
-
-      const item = await db
-        .selectFrom("exchange_items")
-        .selectAll()
-        .where("key", "=", itemKey)
-        .where("enabled", "=", 1)
-        .executeTakeFirst();
-      if (!item) throw notFound("exchange_item_not_found", "兑换项不存在");
-
-      const now = Date.now();
-      const frozen = auth.user.bonus_frozen_until !== null && Number(auth.user.bonus_frozen_until) > now;
-      if (frozen) throw forbidden("bonus_frozen", "收益冻结期间不能兑换");
-
-      if (idempotencyKey) {
-        const previous = await db
-          .selectFrom("redemptions")
-          .selectAll()
-          .where("idempotency_key", "=", idempotencyKey)
-          .executeTakeFirst();
-        if (previous) {
-          const current = await db
-            .selectFrom("users")
-            .select("bonus")
-            .where("id", "=", Number(auth.user.id))
-            .executeTakeFirstOrThrow();
-          return exchangeResponse.parse({
-            ok: true,
-            balance: Number(current.bonus),
-            item_key: itemKey,
-            message: "重复请求，已返回原兑换结果",
-          });
-        }
-      }
-
-      if (item.inventory !== null) {
-        const used = await db
-          .selectFrom("redemptions")
-          .select((eb) => eb.fn.countAll<number>().as("count"))
-          .where("item_id", "=", item.id)
-          .executeTakeFirst();
-        if (Number(used?.count ?? 0) >= Number(item.inventory)) {
-          throw conflict("out_of_stock", "兑换项库存不足");
-        }
-      }
-
-      if (item.limit_per_user !== null) {
-        const used = await db
-          .selectFrom("redemptions")
-          .select((eb) => eb.fn.countAll<number>().as("count"))
-          .where("item_id", "=", item.id)
-          .where("user_id", "=", Number(auth.user.id))
-          .executeTakeFirst();
-        if (Number(used?.count ?? 0) >= Number(item.limit_per_user)) {
-          throw conflict("limit_reached", "已达到该兑换项的个人上限");
-        }
-      }
-
-      const price = Number(item.price);
-      let balance = Number(auth.user.bonus);
-      if (balance < price) throw badRequest("insufficient_bonus", "魔力值不足");
-
-      let payload: { type?: string; amount?: number } = {};
-      try {
-        payload = JSON.parse(item.payload_json) as { type?: string; amount?: number };
-      } catch {
-        payload = {};
-      }
-
-      await db.transaction().execute(async (trx) => {
-        const current = await trx
-          .selectFrom("users")
-          .select(["bonus", "uploaded", "downloaded", "invite_balance"])
-          .where("id", "=", Number(auth.user.id))
-          .executeTakeFirstOrThrow();
-
-        const currentBalance = Number(current.bonus);
-        if (currentBalance < price) throw badRequest("insufficient_bonus", "魔力值不足");
-
-        const nextBalance = currentBalance - price;
-        const amount =
-          typeof payload.amount === "number" && Number.isFinite(payload.amount)
-            ? Math.floor(payload.amount)
-            : 0;
-        let nextUploaded = Number(current.uploaded);
-        let nextDownloaded = Number(current.downloaded);
-
-        if (payload.type === "upload") {
-          if (amount <= 0) throw badRequest("invalid_amount", "上传兑换额度无效");
-          nextUploaded += amount;
-        } else if (payload.type === "download_discount") {
-          if (amount <= 0) throw badRequest("invalid_amount", "下载减免额度无效");
-          if (nextDownloaded < amount) {
-            throw badRequest("insufficient_download", "减免额度超过当前计入下载量");
-          }
-          nextDownloaded -= amount;
-        }
-        const nextInviteBalance =
-          payload.type === "invite" ? Number(current.invite_balance) + 1 : Number(current.invite_balance);
-
-        await trx
-          .updateTable("users")
-          .set({
-            bonus: nextBalance,
-            uploaded: nextUploaded,
-            downloaded: nextDownloaded,
-            invite_balance: nextInviteBalance,
-          })
-          .where("id", "=", Number(auth.user.id))
-          .execute();
-
-        await trx
-          .insertInto("bonus_ledger")
-          .values({
-            user_id: Number(auth.user.id),
-            kind: "exchange",
-            delta: -price,
-            balance_after: nextBalance,
-            ref_type:
-              payload.type === "upload"
-                ? "upload_exchange"
-                : payload.type === "download_discount"
-                  ? "download_discount"
-                  : "exchange_item",
-            ref_id: item.key,
-            note: item.name,
-            created_at: now,
-          })
-          .execute();
-
-        await trx
-          .insertInto("redemptions")
-          .values({
-            user_id: Number(auth.user.id),
-            item_id: Number(item.id),
-            price,
-            status: "completed",
-            idempotency_key: idempotencyKey,
-            created_at: now,
-          })
-          .execute();
-
-        balance = nextBalance;
+        body.idempotency_key?.trim() ||
+        (typeof headerValue === "string" ? headerValue.trim() : "") ||
+        null;
+      const result = await performExchange(db, {
+        userId: Number(auth.user.id),
+        classRank: auth.class ? Number(auth.class.rank) : 0,
+        itemKey: (request.params as { key: string }).key,
+        params: (body.params ?? {}) as Record<string, unknown>,
+        idempotencyKey: idempotencyKey ? idempotencyKey.slice(0, 64) : null,
+        actorId: Number(auth.user.id),
+        useRowLocks: config.databaseDriver !== "sqlite",
       });
-
       return exchangeResponse.parse({
         ok: true,
-        balance,
-        item_key: itemKey,
-        message: `已兑换：${item.name}`,
+        balance: result.balance,
+        item_key: result.itemKey,
+        redemption_id: result.redemptionId,
+        status: "completed",
+        message: result.message,
+      });
+    });
+
+    app.get(`${API_PREFIX}/me/redemptions`, async (request) => {
+      const auth = requireAuth(request);
+      const rows = await db
+        .selectFrom("redemptions as r")
+        .leftJoin("users as actor", "actor.id", "r.actor_id")
+        .select([
+          "r.id as id",
+          "r.item_id as item_id",
+          "r.item_key as item_key",
+          "r.type as type",
+          "r.status as status",
+          "r.price as price",
+          "r.params_json as params_json",
+          "r.actor_id as actor_id",
+          "r.created_at as created_at",
+          "actor.username as actor",
+        ])
+        .where("r.user_id", "=", Number(auth.user.id))
+        .where("r.status", "in", ["completed", "failed"])
+        .orderBy("r.created_at", "desc")
+        .limit(50)
+        .execute();
+
+      return redemptionsResponse.parse({
+        items: rows.map((row) =>
+          redemptionItem.parse({
+            id: Number(row.id),
+            item_id: Number(row.item_id),
+            item_key: row.item_key,
+            type: row.type ?? "unknown",
+            status: row.status,
+            price: Number(row.price),
+            params: parseParams(row.params_json),
+            actor: row.actor ?? null,
+            created_at: Number(row.created_at),
+          }),
+        ),
+      });
+    });
+
+    app.get(`${API_PREFIX}/me/hnr/credits`, async (request) => {
+      const auth = requireAuth(request);
+      const summary = await loadHnrCredits(db, Number(auth.user.id));
+      return hnrCreditsResponse.parse(summary);
+    });
+
+    app.post(`${API_PREFIX}/me/hnr/:id/clear`, async (request) => {
+      const auth = requireAuth(request);
+      assertCsrf(request, auth.session);
+      const userId = Number(auth.user.id);
+      const obligationId = Number((request.params as { id: string }).id);
+      if (!Number.isInteger(obligationId) || obligationId <= 0) {
+        throw badRequest("invalid_obligation", "H&R 记录无效");
+      }
+
+      const now = Date.now();
+      const lockIf = <T>(query: T): T =>
+        config.databaseDriver === "sqlite"
+          ? query
+          : (query as T & { forUpdate: () => T }).forUpdate();
+      const credits = await db.transaction().execute(async (trx) => {
+        const obligation = await lockIf(
+          trx
+            .selectFrom("hnr_obligations")
+            .select(["id", "status"])
+            .where("id", "=", obligationId)
+            .where("user_id", "=", userId),
+        ).executeTakeFirst();
+        if (!obligation) throw notFound("hnr_not_found", "H&R 记录不存在");
+        if (obligation.status !== "unreached") {
+          throw conflict("hnr_not_clearable", "只能清除未完成的 H&R 记录");
+        }
+
+        const credit = await lockIf(
+          trx
+            .selectFrom("user_credits")
+            .select(["id", "quantity"])
+            .where("user_id", "=", userId)
+            .where("kind", "=", "hnr_clear")
+            .where("quantity", ">", 0)
+            .where((eb) => eb.or([eb("expires_at", "is", null), eb("expires_at", ">", now)]))
+            .orderBy(sql`case when expires_at is null then 1 else 0 end`, "asc")
+            .orderBy("expires_at", "asc"),
+        ).executeTakeFirst();
+        if (!credit) throw conflict("hnr_credit_missing", "没有可用的 H&R 清除机会");
+
+        await trx
+          .updateTable("user_credits")
+          .set({ quantity: Number(credit.quantity) - 1 })
+          .where("id", "=", credit.id)
+          .execute();
+        const updated = await trx
+          .updateTable("hnr_obligations")
+          .set({ status: "cleared", resolved_at: now })
+          .where("id", "=", obligation.id)
+          .where("user_id", "=", userId)
+          .where("status", "=", "unreached")
+          .execute();
+        if (Number(updated[0]?.numUpdatedRows ?? 0) === 0) {
+          throw conflict("hnr_not_clearable", "H&R 记录状态已变化");
+        }
+
+        await trx
+          .insertInto("audit_logs")
+          .values({
+            actor_id: userId,
+            action: "hnr.clear",
+            target_type: "hnr_obligation",
+            target_id: String(obligation.id),
+            detail_json: JSON.stringify({ credit_id: credit.id }),
+            ip: request.ip,
+            created_at: now,
+          })
+          .execute();
+
+        const remaining = await trx
+          .selectFrom("user_credits")
+          .select((eb) => eb.fn.sum<number>("quantity").as("credits"))
+          .where("user_id", "=", userId)
+          .where("kind", "=", "hnr_clear")
+          .where("quantity", ">", 0)
+          .where((eb) => eb.or([eb("expires_at", "is", null), eb("expires_at", ">", now)]))
+          .executeTakeFirst();
+        return Number(remaining?.credits ?? 0);
+      });
+
+      return clearHnrResponse.parse({
+        ok: true,
+        credits,
+        message: "已清除该条 H&R 记录",
       });
     });
 

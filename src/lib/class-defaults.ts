@@ -88,7 +88,6 @@ export const STAFF_PERMISSIONS = [
   "staff.class_history",
   ...USER_EDIT_BASIC_PERMISSIONS,
 ] as const;
-
 export const USER_EXTRA_PERMISSIONS = [
   "user.list",
   "user.view_history",
@@ -102,6 +101,7 @@ export const OWNER_PERMISSIONS = [
   ...STAFF_PERMISSIONS,
   ...USER_EDIT_SENSITIVE_PERMISSIONS,
   ...USER_EXTRA_PERMISSIONS,
+  "staff.bonus_shop",
   "torrent.auto_approve",
   "torrent.anonymous",
   "user.donor",

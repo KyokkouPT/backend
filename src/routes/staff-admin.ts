@@ -43,6 +43,7 @@ const USER_EDIT_FIELD_PERMISSIONS: Record<string, string> = {
   downloaded: PERMISSIONS.staffUserEditDownloaded,
   invite_balance: PERMISSIONS.staffUserEditInviteBalance,
   warnings: PERMISSIONS.staffUserEditWarnings,
+  custom_title: PERMISSIONS.staffUserEditCustomTitle,
 };
 
 function assertUserEditFields(
@@ -138,6 +139,7 @@ export function staffAdminRoutes(deps: { db: Db }): FastifyPluginAsync {
             class: classBriefOf(classRow, user.class_key, user.class_key),
             warnings: Number(user.warnings ?? 0),
             invite_balance: Number(user.invite_balance ?? 0),
+            custom_title: user.custom_title ?? null,
             status: user.status,
             uploaded: Number(user.uploaded),
             downloaded: Number(user.downloaded),
@@ -326,6 +328,18 @@ export function staffAdminRoutes(deps: { db: Db }): FastifyPluginAsync {
       if (body.downloaded !== undefined) patch.downloaded = body.downloaded;
       if (body.invite_balance !== undefined) patch.invite_balance = body.invite_balance;
       if (body.warnings !== undefined) patch.warnings = body.warnings;
+      if (body.custom_title !== undefined) {
+        const title = body.custom_title === null ? null : body.custom_title.trim();
+        if (title !== null) {
+          if (title.length < 1 || title.length > 64) {
+            throw badRequest("invalid_title", "头衔长度需为 1–64");
+          }
+          if (/[\u0000-\u001f\u007f]/.test(title) || /\p{Extended_Pictographic}/u.test(title)) {
+            throw badRequest("invalid_title", "头衔不能包含控制字符或 emoji");
+          }
+        }
+        patch.custom_title = title;
+      }
       let bonusDelta: number | null = null;
       if (body.bonus !== undefined) {
         patch.bonus = body.bonus;

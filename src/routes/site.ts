@@ -98,6 +98,9 @@ function buildNav(options: { loggedIn: boolean; staffPermissions: string[] }): S
         { key: "staff-review", href: "/staff/review", label: "审核台", icon: "clipboard-check" },
         { key: "staff-reports", href: "/staff/reports", label: "举报", icon: "alert-triangle" },
         { key: "staff-users", href: "/staff/users", label: "用户管理", icon: "user-cog" },
+        ...(options.staffPermissions.includes(PERMISSIONS.staffBonusShop)
+          ? [{ key: "staff-bonus", href: "/staff/bonus", label: "魔力值商店", icon: "sparkles" }]
+          : []),
         ...(options.staffPermissions.includes(PERMISSIONS.staffClasses)
           ? [
               { key: "staff-classes", href: "/staff/classes", label: "等级管理", icon: "layers", exact: true },

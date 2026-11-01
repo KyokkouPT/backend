@@ -242,7 +242,7 @@ export async function runClassRecalc(db: Db, options: RecalcOptions): Promise<Re
     .selectFrom("hnr_obligations")
     .select("user_id")
     .select((eb) => eb.fn.countAll<number>().as("count"))
-    .where("status", "!=", "reached")
+    .where("status", "not in", ["reached", "cleared"])
     .groupBy("user_id")
     .execute();
   const hnrByUser = new Map(hnrRows.map((row) => [Number(row.user_id), Number(row.count)]));

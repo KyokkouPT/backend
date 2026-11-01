@@ -130,7 +130,7 @@ async function loadSimulationContext(
       .selectFrom("hnr_obligations")
       .select((eb) => eb.fn.countAll<number>().as("count"))
       .where("user_id", "=", userId)
-      .where("status", "!=", "reached")
+      .where("status", "not in", ["reached", "cleared"])
       .executeTakeFirst(),
     loadAllClasses(db),
     loadClassRules(db),

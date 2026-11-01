@@ -14,7 +14,7 @@ export function meRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginAsyn
       const auth = requireAuth(request);
       const userId = Number(auth.user.id);
 
-      const [published, seeding, leeching, snatchRows, hnrRows, bonusRate] = await Promise.all([
+      const [published, seeding, leeching, snatchRows, hnrRows, creditRow, bonusRate] = await Promise.all([
         db
           .selectFrom("torrents")
           .select((eb) => eb.fn.countAll<number>().as("count"))
@@ -61,11 +61,22 @@ export function meRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginAsyn
             "h.required_seconds as required_seconds",
             "h.seeded_seconds as seeded_seconds",
             "h.status as status",
+            "h.resolved_at as resolved_at",
           ])
           .where("h.user_id", "=", userId)
           .orderBy("h.deadline_at", "asc")
           .limit(20)
           .execute(),
+        db
+          .selectFrom("user_credits")
+          .select((eb) => eb.fn.sum<number>("quantity").as("credits"))
+          .where("user_id", "=", userId)
+          .where("kind", "=", "hnr_clear")
+          .where("quantity", ">", 0)
+          .where((eb) =>
+            eb.or([eb("expires_at", "is", null), eb("expires_at", ">", Date.now())]),
+          )
+          .executeTakeFirst(),
         evaluateBonusRate(db, auth.user),
       ]);
 
@@ -88,7 +99,9 @@ export function meRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginAsyn
           required_seconds: Number(row.required_seconds),
           seeded_seconds: Number(row.seeded_seconds),
           status: row.status,
+          resolved_at: row.resolved_at === null ? null : Number(row.resolved_at),
         })),
+        hnr_credits: Number(creditRow?.credits ?? 0),
         snatches: snatchRows.map((row) => ({
           torrent_id: Number(row.torrent_id),
           name: row.name,
