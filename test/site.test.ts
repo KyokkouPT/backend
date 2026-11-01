@@ -21,11 +21,13 @@ describe("site / bootstrap / home / rules", () => {
     const body = res.json() as {
       name: string;
       version: string;
+      allow_guest_access: boolean;
       registration: { open: boolean };
       footer: { copyright: string };
     };
     expect(body.name).toBe("KyokkouPT");
     expect(body.version).toBe("0.1.0");
+    expect(body.allow_guest_access).toBe(true);
     expect(body.registration.open).toBe(true);
     expect(body.footer.copyright).toContain("KyokkouPT");
   });

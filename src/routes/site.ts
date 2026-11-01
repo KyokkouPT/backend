@@ -39,6 +39,7 @@ function toSiteIdentity(settings: Settings, version: string): SiteIdentity {
     name: settings.site.name,
     tagline: settings.site.tagline,
     locale: settings.site.locale,
+    allow_guest_access: settings.site.allow_guest_access,
     version,
     theme: { default: "polar" },
     modules: {

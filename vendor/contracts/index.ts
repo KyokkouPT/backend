@@ -113,6 +113,7 @@ export const siteIdentity = z.object({
   name: z.string(),
   tagline: z.string(),
   locale: z.string(),
+  allow_guest_access: z.boolean(),
   version: z.string(),
   theme: siteTheme,
   modules: z.record(z.boolean()),
@@ -1023,6 +1024,7 @@ export const staffSettings = z.object({
     name: z.string().min(1).max(64),
     tagline: z.string().max(160),
     locale: z.string().min(2).max(16),
+    allow_guest_access: z.boolean(),
   }),
   registration: z.object({
     open: z.boolean(),

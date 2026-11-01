@@ -11,6 +11,7 @@ export const siteSettings = z.object({
   name: z.string().min(1).max(64),
   tagline: z.string().max(160),
   locale: z.string().min(2).max(16),
+  allow_guest_access: z.boolean().default(true),
 });
 
 export const registrationSettings = z.object({
@@ -119,6 +120,7 @@ export const DEFAULT_SETTINGS: Settings = {
     name: "KyokkouPT",
     tagline: "通用、可配置、可自部署的私有种子站引擎",
     locale: "zh-CN",
+    allow_guest_access: true,
   },
   registration: {
     open: true,

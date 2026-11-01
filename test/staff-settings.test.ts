@@ -31,8 +31,14 @@ describe("staff settings", () => {
       headers: { cookie: admin.cookieHeader },
     });
     expect(current.statusCode).toBe(200);
-    const settings = (current.json() as { settings: { site: { name: string }; registration: { closed_registration_mode: string } } }).settings;
+    const settings = (current.json() as {
+      settings: {
+        site: { name: string; allow_guest_access: boolean };
+        registration: { closed_registration_mode: string };
+      };
+    }).settings;
     expect(settings.site.name.length).toBeGreaterThan(0);
+    expect(settings.site.allow_guest_access).toBe(true);
     expect(settings.registration.closed_registration_mode).toBe("auto");
 
     const updated = await ctx.app.inject({
@@ -40,7 +46,7 @@ describe("staff settings", () => {
       url: `${API_PREFIX}/staff/settings`,
       headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
       payload: {
-        site: { tagline: "新的副标题" },
+        site: { tagline: "新的副标题", allow_guest_access: false },
         registration: { open: true, closed_registration_mode: "message" },
       },
     });
@@ -48,6 +54,10 @@ describe("staff settings", () => {
     expect((updated.json() as { settings: { site: { tagline: string } } }).settings.site.tagline).toBe(
       "新的副标题",
     );
+    expect(
+      (updated.json() as { settings: { site: { allow_guest_access: boolean } } }).settings.site
+        .allow_guest_access,
+    ).toBe(false);
     expect(
       (updated.json() as { settings: { registration: { closed_registration_mode: string } } }).settings
         .registration.closed_registration_mode,
