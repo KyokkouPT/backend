@@ -91,7 +91,7 @@ describe("tracker announce", () => {
     expect(snatch?.status).toBe("seeding");
   });
 
-  it("never decreases persisted counters", async () => {
+  it("counts each peer session and never decreases persisted counters", async () => {
     const before = await userRow("axue");
 
     await ctx.app.inject({
@@ -99,14 +99,14 @@ describe("tracker announce", () => {
       url: announcePath(axuePasskey, ZONE_HASH, "axue-2", { uploaded: 500, left: 0 }),
     });
     const afterSmall = await userRow("axue");
-    expect(Number(afterSmall.uploaded)).toBe(Number(before.uploaded));
+    expect(Number(afterSmall.uploaded) - Number(before.uploaded)).toBe(500);
 
     await ctx.app.inject({
       method: "GET",
       url: announcePath(axuePasskey, ZONE_HASH, "axue-3", { uploaded: 3000, left: 0 }),
     });
     const afterBig = await userRow("axue");
-    expect(Number(afterBig.uploaded) - Number(before.uploaded)).toBe(2000);
+    expect(Number(afterBig.uploaded) - Number(before.uploaded)).toBe(3500);
 
     const snatch = await ctx.db
       .selectFrom("snatches as sn")
@@ -115,7 +115,40 @@ describe("tracker announce", () => {
       .where("t.info_hash", "=", ZONE_HASH)
       .where("sn.user_id", "=", Number((await userRow("axue")).id))
       .executeTakeFirstOrThrow();
-    expect(Number(snatch.uploaded)).toBe(3000);
+    expect(Number(snatch.uploaded)).toBe(4500);
+  });
+
+  it("does not double count repeated announces from the same peer session", async () => {
+    const before = await userRow("axue");
+    await ctx.app.inject({
+      method: "GET",
+      url: announcePath(axuePasskey, ZONE_HASH, "axue-same", {
+        uploaded: 1000,
+        left: 0,
+        event: "",
+      }),
+    });
+    await ctx.app.inject({
+      method: "GET",
+      url: announcePath(axuePasskey, ZONE_HASH, "axue-same", {
+        uploaded: 1000,
+        left: 0,
+        event: "",
+      }),
+    });
+    const unchanged = await userRow("axue");
+    expect(Number(unchanged.uploaded) - Number(before.uploaded)).toBe(1000);
+
+    await ctx.app.inject({
+      method: "GET",
+      url: announcePath(axuePasskey, ZONE_HASH, "axue-same", {
+        uploaded: 1500,
+        left: 0,
+        event: "",
+      }),
+    });
+    const increased = await userRow("axue");
+    expect(Number(increased.uploaded) - Number(before.uploaded)).toBe(1500);
   });
 
   it("counts event=completed only once and creates an H&R obligation", async () => {

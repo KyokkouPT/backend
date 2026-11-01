@@ -84,6 +84,17 @@ export interface PeersTable {
   created_at: number;
 }
 
+export interface TrackerSessionsTable {
+  id: Generated<number>;
+  user_id: number;
+  torrent_id: number;
+  peer_id_hex: string;
+  uploaded: number;
+  downloaded: number;
+  last_seen: number;
+  created_at: number;
+}
+
 export interface UsersTable {
   id: Generated<number>;
   username: string;
@@ -517,6 +528,7 @@ export interface Database {
   user_class_progress: UserClassProgressTable;
   job_leases: JobLeasesTable;
   peers: PeersTable;
+  tracker_sessions: TrackerSessionsTable;
   username_reservations: UsernameReservationsTable;
   username_changes: UsernameChangesTable;
   user_credits: UserCreditsTable;

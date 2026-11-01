@@ -167,6 +167,7 @@ export async function prunePeers(db: Db, ttlMs: number): Promise<number> {
     .where("last_seen", "<", cutoff)
     .execute();
   const deleted = await db.deleteFrom("peers").where("last_seen", "<", cutoff).executeTakeFirst();
+  await db.deleteFrom("tracker_sessions").where("last_seen", "<", cutoff).execute();
   for (const row of affected) {
     await syncTorrentCounts(db, Number(row.torrent_id));
   }
@@ -175,4 +176,5 @@ export async function prunePeers(db: Db, ttlMs: number): Promise<number> {
 
 export async function clearPeersForTests(db: Db): Promise<void> {
   await db.deleteFrom("peers").execute();
+  await db.deleteFrom("tracker_sessions").execute();
 }

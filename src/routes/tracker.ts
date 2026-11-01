@@ -90,6 +90,7 @@ export function trackerRoutes(deps: { db: Db; config: AppConfig }): FastifyPlugi
       await recordAnnounce(db, {
         user,
         torrent,
+        peerIdHex,
         uploaded,
         downloaded,
         left,

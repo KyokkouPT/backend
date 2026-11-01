@@ -12,7 +12,9 @@ const MAX_SEEDTIME_DELTA_MS = 6 * 3_600_000;
  * 把一次 announce 写进 snatches/users/torrents，并评估 H&R。
  *
  * 关键不变量：
- * - uploaded/downloaded 只增不减（取 max），所以客户端重启上报 0 不会回退；
+ * - users/snatches 的流量是生命周期累计；
+ * - 每个 peer 会话单独记录上一轮 counters，同一会话重复 announce 不会重复计数；
+ * - 新 peer 会话（重新下载/重新做种）从 0 开始，会计入新的流量；
  * - event=completed 只计一次（snatches.completed_at + torrents.completed）；
  * - promo 影响站点统计：free 不计下载、2x 上传双倍、50/30 打折。
  */
@@ -21,6 +23,7 @@ export async function recordAnnounce(
   input: {
     user: UserRow;
     torrent: TorrentRow;
+    peerIdHex: string;
     uploaded: number;
     downloaded: number;
     left: number;
@@ -38,13 +41,60 @@ export async function recordAnnounce(
       .where("torrent_id", "=", input.torrent.id)
       .executeTakeFirst();
 
+    const session = await trx
+      .selectFrom("tracker_sessions")
+      .selectAll()
+      .where("user_id", "=", input.user.id)
+      .where("torrent_id", "=", input.torrent.id)
+      .where("peer_id_hex", "=", input.peerIdHex)
+      .executeTakeFirst();
+
+    let uploadDelta: number;
+    let downloadDelta: number;
+    if (session) {
+      const sessionUploaded = Number(session.uploaded);
+      const sessionDownloaded = Number(session.downloaded);
+      // 客户端计数器正常只增；变小说明客户端重开/重新添加了任务，从当前值重新开始。
+      uploadDelta =
+        input.uploaded >= sessionUploaded ? input.uploaded - sessionUploaded : input.uploaded;
+      downloadDelta =
+        input.downloaded >= sessionDownloaded
+          ? input.downloaded - sessionDownloaded
+          : input.downloaded;
+    } else {
+      uploadDelta = input.uploaded;
+      downloadDelta = input.downloaded;
+    }
+
+    if (session) {
+      await trx
+        .updateTable("tracker_sessions")
+        .set({
+          uploaded: input.uploaded,
+          downloaded: input.downloaded,
+          last_seen: now,
+        })
+        .where("id", "=", session.id)
+        .execute();
+    } else {
+      await trx
+        .insertInto("tracker_sessions")
+        .values({
+          user_id: Number(input.user.id),
+          torrent_id: Number(input.torrent.id),
+          peer_id_hex: input.peerIdHex,
+          uploaded: input.uploaded,
+          downloaded: input.downloaded,
+          last_seen: now,
+          created_at: now,
+        })
+        .execute();
+    }
+
     const previousUploaded = existing ? Number(existing.uploaded) : 0;
     const previousDownloaded = existing ? Number(existing.downloaded) : 0;
-    const nextUploaded = Math.max(previousUploaded, input.uploaded);
-    const nextDownloaded = Math.max(previousDownloaded, input.downloaded);
-
-    const uploadDelta = Math.max(0, input.uploaded - previousUploaded);
-    const downloadDelta = Math.max(0, input.downloaded - previousDownloaded);
+    const nextUploaded = previousUploaded + uploadDelta;
+    const nextDownloaded = previousDownloaded + downloadDelta;
 
     const seedtimeDelta =
       existing && input.left === 0 && existing.last_announce_at !== null

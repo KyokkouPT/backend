@@ -47,6 +47,7 @@ describe("migrations", () => {
         { version: 17, name: "invite_email" },
         { version: 18, name: "invite_username" },
         { version: 19, name: "invite_code_case" },
+        { version: 20, name: "tracker_sessions" },
       ]);
 
       const users = await db.selectFrom("users").selectAll().execute();
