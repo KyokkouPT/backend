@@ -155,4 +155,75 @@ describe("staff settings", () => {
     });
     expect(forbidden.statusCode).toBe(403);
   });
+
+  it("saves independent bonus/class schedules and validates formulas", async () => {
+    const initial = await ctx.app.inject({
+      method: "GET",
+      url: `${API_PREFIX}/staff/settings`,
+      headers: { cookie: admin.cookieHeader },
+    });
+    const body = initial.json() as {
+      settings: { bonus: { cron: string; next_run_at: number | null; default_formula: string } };
+    };
+    expect(body.settings.bonus.cron).toBe("0 * * * *");
+    expect(body.settings.bonus.default_formula).toContain("result");
+
+    const invalidCron = await ctx.app.inject({
+      method: "PUT",
+      url: `${API_PREFIX}/staff/settings`,
+      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
+      payload: { bonus: { cron: "* * * * *" } },
+    });
+    expect(invalidCron.statusCode).toBe(400);
+
+    const invalidFormula = await ctx.app.inject({
+      method: "PUT",
+      url: `${API_PREFIX}/staff/settings`,
+      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
+      payload: { bonus: { formula: "result = missing + 1" } },
+    });
+    expect(invalidFormula.statusCode).toBe(400);
+
+    const saved = await ctx.app.inject({
+      method: "PUT",
+      url: `${API_PREFIX}/staff/settings`,
+      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
+      payload: {
+        bonus: { cron: "30 * * * *", formula: "result = seeders + 1" },
+        classes: { recalc_cron: "0 4 * * *" },
+      },
+    });
+    expect(saved.statusCode).toBe(200);
+
+    const preview = await ctx.app.inject({
+      method: "POST",
+      url: `${API_PREFIX}/staff/bonus/formula/preview`,
+      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
+      payload: { formula: "result = seeders + 2" },
+    });
+    expect(preview.statusCode).toBe(200);
+    expect((preview.json() as { result: number }).result).toBe(4);
+
+    const userRow = await ctx.db
+      .selectFrom("users")
+      .select("id")
+      .where("username", "=", "阿雪")
+      .executeTakeFirstOrThrow();
+    const simulate = await ctx.app.inject({
+      method: "POST",
+      url: `${API_PREFIX}/staff/bonus/formula/simulate`,
+      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
+      payload: { formula: "result = seeders", user_id: Number(userRow.id) },
+    });
+    expect(simulate.statusCode).toBe(200);
+    expect((simulate.json() as { username: string }).username).toBe("阿雪");
+
+    const forbidden = await ctx.app.inject({
+      method: "POST",
+      url: `${API_PREFIX}/staff/bonus/formula/preview`,
+      headers: { cookie: user.cookieHeader, "x-csrf-token": user.csrfToken },
+      payload: { formula: "result = 1" },
+    });
+    expect(forbidden.statusCode).toBe(403);
+  });
 });

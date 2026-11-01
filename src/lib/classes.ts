@@ -137,6 +137,8 @@ export async function loadOverrides(db: Db, userId: number, now = Date.now()): P
     .execute();
 }
 
+export type PermissionOverride = Pick<OverrideRow, "permission" | "effect" | "expires_at">;
+
 /** staff.available 硬门控：没有它时忽略全部 staff.* 节点。 */
 export function gateStaffPermissions(permissions: string[]): string[] {
   if (permissions.includes(PERMISSIONS.staffAvailable)) return permissions;
@@ -145,7 +147,7 @@ export function gateStaffPermissions(permissions: string[]): string[] {
 
 export function computePermissions(
   classRow: ClassRow | null,
-  overrides: OverrideRow[],
+  overrides: PermissionOverride[],
   now = Date.now(),
 ): string[] {
   const set = new Set(classRow ? parsePermissions(classRow.permissions_json) : []);

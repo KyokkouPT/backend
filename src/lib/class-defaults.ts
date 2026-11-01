@@ -88,6 +88,7 @@ export const OWNER_PERMISSIONS = [
   ...USER_EXTRA_PERMISSIONS,
   "torrent.auto_approve",
   "torrent.anonymous",
+  "user.donor",
   "torrent.view_hidden",
   "torrent.edit",
   "torrent.delete",

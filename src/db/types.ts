@@ -43,6 +43,26 @@ export interface AuditLogsTable {
   created_at: number;
 }
 
+export interface JobLeasesTable {
+  key: string;
+  owner: string;
+  expires_at: number;
+  updated_at: number;
+}
+
+export interface PeersTable {
+  id: Generated<number>;
+  torrent_id: number;
+  user_id: number;
+  peer_id_hex: string;
+  ip: string;
+  port: number;
+  left_bytes: number;
+  seeder: number;
+  last_seen: number;
+  created_at: number;
+}
+
 export interface UsersTable {
   id: Generated<number>;
   username: string;
@@ -183,6 +203,8 @@ export interface TorrentsTable {
   seeders: number;
   leechers: number;
   completed: number;
+  /** 独立于促销的零魔标记：做种魔力权重 0.2。 */
+  zero_bonus: number;
   description: string | null;
   meta_json: string | null;
   /** 原始 .torrent 字节；下载时只替换 announce，保留 info 原始字节。 */
@@ -449,4 +471,6 @@ export interface Database {
   user_class_history: UserClassHistoryTable;
   class_recalc_runs: ClassRecalcRunsTable;
   user_class_progress: UserClassProgressTable;
+  job_leases: JobLeasesTable;
+  peers: PeersTable;
 }

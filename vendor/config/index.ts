@@ -45,7 +45,39 @@ export const classesSettings = z.object({
   recalc_cron: z.string().min(5).max(64),
 });
 
-export const SETTING_KEYS = ["site", "registration", "tracker", "economy", "review", "classes"] as const;
+export const bonusSettings = z.object({
+  cron: z.string().min(5).max(64),
+  formula: z.string().min(1).max(2000),
+});
+
+export const DEFAULT_BONUS_FORMULA = `perseeding = 1
+maxseeding = 7
+tzero = 4
+nzero = 7
+bzero = 100
+l = 300
+donor_multiplier = 3
+zero_weight = 0.2
+
+A = sum(
+  (1 - 10 ^ (-t.age_weeks / tzero))
+  * t.size_gb
+  * (1 + sqrt(2) * 10 ^ (-(t.seeders - 1) / (nzero - 1)))
+  * if(t.is_zero_bonus, zero_weight, 1)
+)
+
+result = (bzero * 2 / pi * atan(A / l)) + perseeding * min(seeders, maxseeding)
+result = result * if(is_donor, donor_multiplier, 1)`;
+
+export const SETTING_KEYS = [
+  "site",
+  "registration",
+  "tracker",
+  "economy",
+  "review",
+  "classes",
+  "bonus",
+] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
 export const settingsSchema = z.object({
@@ -55,6 +87,7 @@ export const settingsSchema = z.object({
   economy: economySettings,
   review: reviewSettings,
   classes: classesSettings,
+  bonus: bonusSettings,
 });
 
 export type SiteSettings = z.infer<typeof siteSettings>;
@@ -63,6 +96,7 @@ export type TrackerSettings = z.infer<typeof trackerSettings>;
 export type EconomySettings = z.infer<typeof economySettings>;
 export type ReviewSettings = z.infer<typeof reviewSettings>;
 export type ClassesSettings = z.infer<typeof classesSettings>;
+export type BonusSettings = z.infer<typeof bonusSettings>;
 export type Settings = z.infer<typeof settingsSchema>;
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -97,5 +131,9 @@ export const DEFAULT_SETTINGS: Settings = {
   classes: {
     recalc_enabled: true,
     recalc_cron: "*/15 * * * *",
+  },
+  bonus: {
+    cron: "0 * * * *",
+    formula: DEFAULT_BONUS_FORMULA,
   },
 };

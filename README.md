@@ -77,6 +77,7 @@ seed 开发账号（密码由 `SEED_PASSWORD` 控制，默认 `kyokkou-dev`）�
 | `LOG_LEVEL` | `info` | fatal…trace |
 | `DATABASE_DRIVER` | `sqlite` | sqlite / mysql / mariadb / postgres |
 | `DATABASE_URL` | `file:./data/kyokkou.db` | mysql:// 或 postgres:// |
+| `INSTANCE_ID` | 自动生成 | 多实例部署时每个后端实例的唯一标识，用于 cron 租约 |
 | `KYOKKOU_BASE_URL` | `http://localhost:31002` | 公开前端地址（announce/download/RSS 链接）；不要用 `BASE_URL` |
 | `SESSION_SECRET` | 开发默认值 | 32+ 字节；生产未替换会拒绝启动 |
 | `SEED_PASSWORD` | `kyokkou-dev` | seed 账号密码；生产未替换会拒绝启动 |
@@ -84,7 +85,8 @@ seed 开发账号（密码由 `SEED_PASSWORD` 控制，默认 `kyokkou-dev`）�
 ## 数据库与迁移
 
 - 迁移在 `src/db/migrations/NNN_name.ts`，按 `version` 顺序执行，记录在 `schema_migrations`。
-- 当前：001_init（基础表）、002_notifications（站内通知；审核结果需要通知发布者）。
+- 当前：001_init 到 013_tracker_peers（011 魔力公式/浮点/零魔；012 调度租约与索引；013 DB 化 Tracker peers）。
+- SQLite 只支持单实例；多实例必须 MySQL/MariaDB/PostgreSQL，详见 `../docs/23-performance-multi-instance.md`。
 - SQLite / PostgreSQL 的迁移在一个事务里；MySQL/MariaDB 的 DDL 非事务，失败会明确抛错，重试前需人工检查。
 - 主键按方言生成：SQLite `integer primary key autoincrement`、MySQL `bigint auto_increment`、PostgreSQL `bigserial`。
 - 计数/时间戳是 bigint 列，应用层统一 number（写入 < 2^53）；PostgreSQL 的 int8 在 `db.ts` 里解析为 number。

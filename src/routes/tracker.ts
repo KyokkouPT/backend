@@ -6,16 +6,8 @@ import type { Db } from "../db/db.js";
 import { loadSettings } from "../lib/settings.js";
 import { recordAnnounce } from "../tracker/persist.js";
 import { bufferToAscii, parseRawQuery } from "../tracker/raw-query.js";
-import {
-  compactIPv4,
-  compactIPv6,
-  countPeers,
-  listPeers,
-  normalizeIp,
-  peerKey,
-  removePeer,
-  upsertPeer,
-} from "../tracker/registry.js";
+import { compactIPv4, compactIPv6, normalizeIp } from "../tracker/registry.js";
+import { countPeers, listPeers, removePeer, syncTorrentCounts, upsertPeer } from "../tracker/peer-store.js";
 
 function failure(reason: string): Buffer {
   return encodeBencode({ "failure reason": reason });
@@ -78,13 +70,13 @@ export function trackerRoutes(deps: { db: Db; config: AppConfig }): FastifyPlugi
       const requestedIp = bufferToAscii(query.get("ip")?.[0]);
       const ip = requestedIp && isIP(requestedIp) !== 0 ? requestedIp : normalizeIp(request.ip);
       const peerIdHex = peerIdBuffer.toString("hex");
-      const key = peerKey(Number(user.id), peerIdHex);
       const now = Date.now();
 
       if (event === "stopped") {
-        removePeer(infoHashHex, key);
+        await removePeer(db, Number(torrent.id), Number(user.id), peerIdHex);
       } else {
-        upsertPeer(infoHashHex, {
+        await upsertPeer(db, {
+          torrentId: Number(torrent.id),
           peerIdHex,
           ip,
           port,
@@ -106,13 +98,8 @@ export function trackerRoutes(deps: { db: Db; config: AppConfig }): FastifyPlugi
       });
 
       const settings = await loadSettings(db);
-      const counts = countPeers(infoHashHex);
-
-      await db
-        .updateTable("torrents")
-        .set({ seeders: counts.seeders, leechers: counts.leechers })
-        .where("id", "=", torrent.id)
-        .execute();
+      await syncTorrentCounts(db, Number(torrent.id));
+      const counts = await countPeers(db, Number(torrent.id));
 
       const fresh = await db
         .selectFrom("torrents")
@@ -120,14 +107,15 @@ export function trackerRoutes(deps: { db: Db; config: AppConfig }): FastifyPlugi
         .where("id", "=", torrent.id)
         .executeTakeFirst();
 
-      const others = listPeers(infoHashHex).filter(
-        (peer) => !(peer.userId === Number(user.id) && peer.peerIdHex === peerIdHex),
-      );
       const numwant = Math.min(
         asInt(bufferToAscii(query.get("numwant")?.[0])) || 50,
         settings.tracker.max_peers,
       );
-      const selected = others.slice(0, numwant);
+      const selected = await listPeers(db, Number(torrent.id), {
+        limit: numwant,
+        excludeUserId: Number(user.id),
+        excludePeerIdHex: peerIdHex,
+      });
       const peers4 = compactIPv4(selected);
       const peers6 = settings.tracker.allow_ipv6 ? compactIPv6(selected) : Buffer.alloc(0);
 
@@ -182,12 +170,12 @@ export function trackerRoutes(deps: { db: Db; config: AppConfig }): FastifyPlugi
         const hex = hash.toString("hex");
         const torrent = await db
           .selectFrom("torrents")
-          .select(["completed", "status", "deleted_at"])
+          .select(["id", "completed", "status", "deleted_at"])
           .where("info_hash", "=", hex)
           .executeTakeFirst();
         if (!torrent || torrent.status !== "approved" || torrent.deleted_at !== null) continue;
 
-        const counts = countPeers(hex);
+        const counts = await countPeers(db, Number(torrent.id));
         parts.push(
           encodeBytes(hash),
           encodeBencode({

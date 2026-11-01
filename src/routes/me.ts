@@ -3,7 +3,7 @@ import { API_PREFIX, meResponse } from "@kyokkou/contracts";
 import type { AppConfig } from "../config.js";
 import type { Db } from "../db/db.js";
 import { requireAuth } from "../auth/csrf.js";
-import { seedingStats, yieldPerHourBase } from "../lib/bonus.js";
+import { evaluateBonusRate } from "../lib/bonus.js";
 import { numberCount, toUserSummary } from "../lib/serialize.js";
 
 export function meRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginAsync {
@@ -14,7 +14,7 @@ export function meRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginAsyn
       const auth = requireAuth(request);
       const userId = Number(auth.user.id);
 
-      const [published, seeding, leeching, snatchRows, hnrRows, seedStats] = await Promise.all([
+      const [published, seeding, leeching, snatchRows, hnrRows, bonusRate] = await Promise.all([
         db
           .selectFrom("torrents")
           .select((eb) => eb.fn.countAll<number>().as("count"))
@@ -66,7 +66,7 @@ export function meRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginAsyn
           .orderBy("h.deadline_at", "asc")
           .limit(20)
           .execute(),
-        seedingStats(db, userId),
+        evaluateBonusRate(db, auth.user),
       ]);
 
       const frozenUntil =
@@ -99,9 +99,7 @@ export function meRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginAsyn
           status: row.status,
         })),
         rss_url: `${config.baseUrl}/rss?passkey=${auth.user.passkey}`,
-        bonus_yield_per_hour: frozen
-          ? 0
-          : yieldPerHourBase(seedStats.count, seedStats.totalBytes),
+        bonus_yield_per_hour: frozen ? 0 : bonusRate.rate,
         bonus_frozen_until: frozenUntil,
       });
     });

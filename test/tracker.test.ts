@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { decodeTorrent } from "../src/lib/bencode.js";
 import { settleHnr } from "../src/lib/hnr.js";
-import { prunePeers, resetRegistryForTests } from "../src/tracker/registry.js";
+import { clearPeersForTests, prunePeers } from "../src/tracker/peer-store.js";
 import { createTestContext, type TestContext } from "./helpers.js";
 
 let ctx: TestContext;
@@ -47,8 +47,8 @@ async function userRow(username: string) {
 }
 
 beforeAll(async () => {
-  resetRegistryForTests();
   ctx = await createTestContext();
+  await clearPeersForTests(ctx.db);
   axuePasskey = (await userRow("阿雪")).passkey;
   lightbringerPasskey = (await userRow("lightbringer")).passkey;
 });
@@ -263,7 +263,7 @@ describe("tracker announce", () => {
   });
 
   it("prunes stale peers by TTL", async () => {
-    const removed = prunePeers(-1);
+    const removed = await prunePeers(ctx.db, -1);
     expect(removed).toBeGreaterThan(0);
   });
 });

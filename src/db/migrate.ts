@@ -1,9 +1,42 @@
+import { sql } from "kysely";
 import type { Db } from "./db.js";
 import { migrations } from "./migrations/index.js";
 import type { Migration } from "./migrations/types.js";
 import type { DatabaseDriver } from "../config.js";
 
 export type AppliedMigration = { version: number; name: string };
+
+async function withMigrationLock<T>(
+  db: Db,
+  dialect: DatabaseDriver,
+  run: () => Promise<T>,
+): Promise<T> {
+  // SQLite 不支持多进程迁移锁；文档要求生产多实例使用 MySQL/PostgreSQL。
+  if (dialect === "sqlite") return run();
+
+  return db.connection().execute(async (connection) => {
+    if (dialect === "postgres") {
+      await sql`select pg_advisory_lock(1330001)`.execute(connection);
+      try {
+        return await run();
+      } finally {
+        await sql`select pg_advisory_unlock(1330001)`.execute(connection);
+      }
+    }
+
+    const lock = await sql<{ locked: number }>`select get_lock('kyokkoupt_migrate', 60) as locked`.execute(
+      connection,
+    );
+    if (Number(lock.rows[0]?.locked ?? 0) !== 1) {
+      throw new Error("could not acquire migration lock within 60s");
+    }
+    try {
+      return await run();
+    } finally {
+      await sql`select release_lock('kyokkoupt_migrate')`.execute(connection);
+    }
+  });
+}
 
 async function ensureMigrationsTable(db: Db): Promise<void> {
   await db.schema
@@ -22,7 +55,7 @@ async function ensureMigrationsTable(db: Db): Promise<void> {
  * - MySQL / MariaDB：DDL 会隐式提交，失败时明确抛出（不静默），
  *   重试前需要人工检查已部分应用的 DDL。
  */
-export async function runMigrations(
+async function runMigrationsUnlocked(
   db: Db,
   dialect: DatabaseDriver,
   list: Migration[] = migrations,
@@ -58,6 +91,14 @@ export async function runMigrations(
   }
 
   return ran;
+}
+
+export async function runMigrations(
+  db: Db,
+  dialect: DatabaseDriver,
+  list: Migration[] = migrations,
+): Promise<AppliedMigration[]> {
+  return withMigrationLock(db, dialect, () => runMigrationsUnlocked(db, dialect, list));
 }
 
 export async function currentSchemaVersion(db: Db): Promise<number> {

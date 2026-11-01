@@ -38,6 +38,9 @@ describe("migrations", () => {
         { version: 8, name: "classes" },
         { version: 9, name: "class_simulator" },
         { version: 10, name: "raw_traffic" },
+        { version: 11, name: "bonus_formula" },
+        { version: 12, name: "scheduler_leases" },
+        { version: 13, name: "tracker_peers" },
       ]);
 
       const users = await db.selectFrom("users").selectAll().execute();

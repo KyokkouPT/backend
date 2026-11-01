@@ -575,6 +575,7 @@ export async function seedDatabase(db: Db, options: { password: string }): Promi
           files_count: torrent.files.length,
           status: "approved",
           promo: torrent.promo,
+          zero_bonus: 0,
           seeders: torrent.seeders,
           leechers: torrent.leechers,
           completed: torrent.completed,

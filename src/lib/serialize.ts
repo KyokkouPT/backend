@@ -79,6 +79,7 @@ export type TorrentJoinRow = {
   size: number;
   files_count: number;
   promo: string;
+  zero_bonus: number;
   seeders: number;
   leechers: number;
   completed: number;
@@ -111,6 +112,7 @@ export function toTorrentSummary(
     size: Number(row.size),
     files_count: Number(row.files_count),
     promo,
+    zero_bonus: Number(row.zero_bonus) === 1,
     seeders: Number(row.seeders),
     leechers: Number(row.leechers),
     completed: Number(row.completed),

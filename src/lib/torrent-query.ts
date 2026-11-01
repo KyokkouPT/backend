@@ -25,6 +25,7 @@ type SummaryRow = {
   size: number;
   files_count: number;
   promo: string;
+  zero_bonus: number;
   seeders: number;
   leechers: number;
   completed: number;
@@ -44,6 +45,7 @@ const SUMMARY_COLUMNS = [
   "t.size as size",
   "t.files_count as files_count",
   "t.promo as promo",
+  "t.zero_bonus as zero_bonus",
   "t.seeders as seeders",
   "t.leechers as leechers",
   "t.completed as completed",
@@ -65,6 +67,7 @@ function toSummary(row: SummaryRow, tags: string[], viewerId: number | null): To
       size: Number(row.size),
       files_count: Number(row.files_count),
       promo: row.promo,
+      zero_bonus: Number(row.zero_bonus),
       seeders: Number(row.seeders),
       leechers: Number(row.leechers),
       completed: Number(row.completed),

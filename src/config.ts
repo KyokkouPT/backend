@@ -1,3 +1,4 @@
+import { hostname } from "node:os";
 import { z } from "zod";
 
 /**
@@ -15,6 +16,9 @@ const envSchema = z.object({
 
   DATABASE_DRIVER: z.enum(["sqlite", "mysql", "mariadb", "postgres"]).default("sqlite"),
   DATABASE_URL: z.string().min(1).default("file:./data/kyokkou.db"),
+
+  /** 多实例部署时每个实例的唯一标识；默认主机名:pid:随机。 */
+  INSTANCE_ID: z.string().min(1).max(160).optional(),
 
   /** 公开前端地址，用于 announce/download/RSS 链接；不要用 BASE_URL。 */
   KYOKKOU_BASE_URL: z.string().url().default("http://localhost:31002"),
@@ -62,6 +66,7 @@ export type AppConfig = {
   trackerBaseUrl: string;
   sessionSecret: string;
   seedPassword: string;
+  instanceId: string;
   cookieSecure: boolean;
   trustProxy: boolean;
   smtp: SmtpConfig | null;
@@ -124,6 +129,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     trackerBaseUrl: (data.TRACKER_PUBLIC_URL ?? data.KYOKKOU_BASE_URL).replace(/\/+$/, ""),
     sessionSecret: data.SESSION_SECRET,
     seedPassword: data.SEED_PASSWORD,
+    instanceId:
+      data.INSTANCE_ID ??
+      `${hostname()}:${String(process.pid)}:${Math.random().toString(36).slice(2, 8)}`,
     cookieSecure:
       data.COOKIE_SECURE === undefined
         ? data.NODE_ENV === "production"

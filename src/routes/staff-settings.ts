@@ -1,8 +1,12 @@
 import type { FastifyPluginAsync } from "fastify";
-import { SETTING_KEYS, settingsSchema } from "@kyokkou/config";
+import { DEFAULT_BONUS_FORMULA, SETTING_KEYS, settingsSchema } from "@kyokkou/config";
 import {
   API_PREFIX,
   PERMISSIONS,
+  bonusFormulaPreviewBody,
+  bonusFormulaPreviewResponse,
+  bonusFormulaSimulateBody,
+  bonusFormulaSimulateResponse,
   createCategoryBody,
   createSectionBody,
   staffActionResponse,
@@ -16,8 +20,10 @@ import {
 import type { Db } from "../db/db.js";
 import { assertCsrf, requireAuth } from "../auth/csrf.js";
 import { HttpProblem, conflict, notFound } from "../lib/problem.js";
-import { nextRunAt, reloadClassScheduler } from "../lib/class-scheduler.js";
+import { nextRunAt, reloadSchedulers } from "../lib/scheduler.js";
 import { loadSettings } from "../lib/settings.js";
+import { compileFormula, evaluateFormula, FormulaError, sampleFormula } from "../lib/bonus-formula.js";
+import { loadBonusContexts } from "../lib/bonus-context.js";
 import { parseOrThrow } from "../lib/validate.js";
 
 function requireSettings(request: Parameters<typeof requireAuth>[0]) {
@@ -68,6 +74,11 @@ export function staffSettingsRoutes(deps: { db: Db }): FastifyPluginAsync {
               ? nextRunAt(settings.classes.recalc_cron)
               : null,
           },
+          bonus: {
+            ...settings.bonus,
+            next_run_at: nextRunAt(settings.bonus.cron),
+            default_formula: DEFAULT_BONUS_FORMULA,
+          },
         },
       });
     });
@@ -85,19 +96,42 @@ export function staffSettingsRoutes(deps: { db: Db }): FastifyPluginAsync {
         economy: { ...current.economy, ...(body.economy ?? {}) },
         review: { ...current.review, ...(body.review ?? {}) },
         classes: { ...current.classes, ...(body.classes ?? {}) },
+        bonus: { ...current.bonus, ...(body.bonus ?? {}) },
       };
       const validated = settingsSchema.parse(merged);
-
-      for (const key of SETTING_KEYS) {
-        if (body[key] !== undefined) await saveSetting(db, key, validated[key]);
-      }
 
       if (body.classes !== undefined) {
         const checked = nextRunAt(validated.classes.recalc_cron);
         if (checked === null) {
           throw new HttpProblem(400, "invalid_cron", "cron 表达式无效或间隔小于 5 分钟");
         }
-        await reloadClassScheduler(db);
+      }
+
+      if (body.bonus !== undefined) {
+        const checked = nextRunAt(validated.bonus.cron);
+        if (checked === null) {
+          throw new HttpProblem(400, "invalid_cron", "魔力值 cron 表达式无效或间隔小于 5 分钟");
+        }
+        try {
+          compileFormula(validated.bonus.formula);
+        } catch (error) {
+          if (error instanceof FormulaError) {
+            throw new HttpProblem(
+              400,
+              "invalid_formula",
+              `公式错误（${String(error.line)}:${String(error.column)}）：${error.message}`,
+            );
+          }
+          throw error;
+        }
+      }
+
+      for (const key of SETTING_KEYS) {
+        if (body[key] !== undefined) await saveSetting(db, key, validated[key]);
+      }
+
+      if (body.classes !== undefined || body.bonus !== undefined) {
+        await reloadSchedulers(db);
       }
 
       await db
@@ -114,6 +148,78 @@ export function staffSettingsRoutes(deps: { db: Db }): FastifyPluginAsync {
         .execute();
 
       return staffSettingsResponse.parse({ settings: validated });
+    });
+
+    app.post(`${API_PREFIX}/staff/bonus/formula/preview`, async (request) => {
+      requireSettings(request);
+      const body = parseOrThrow(bonusFormulaPreviewBody, request.body ?? {});
+      let evaluation;
+      try {
+        compileFormula(body.formula);
+        evaluation = sampleFormula(body.formula);
+      } catch (error) {
+        if (error instanceof FormulaError) {
+          throw new HttpProblem(
+            400,
+            "invalid_formula",
+            `公式错误（${String(error.line)}:${String(error.column)}）：${error.message}`,
+          );
+        }
+        throw error;
+      }
+      return bonusFormulaPreviewResponse.parse({
+        result: evaluation.result,
+        variables: evaluation.variables,
+        samples: [
+          {
+            label: "样例用户",
+            seeders: 2,
+            total_gb: 52,
+            result: evaluation.result,
+          },
+        ],
+        torrents: evaluation.torrents,
+        warnings: evaluation.warnings,
+      });
+    });
+
+    app.post(`${API_PREFIX}/staff/bonus/formula/simulate`, async (request) => {
+      requireSettings(request);
+      const body = parseOrThrow(bonusFormulaSimulateBody, request.body ?? {});
+      const user = await db
+        .selectFrom("users")
+        .select(["id", "username", "status"])
+        .where("id", "=", body.user_id)
+        .executeTakeFirst();
+      if (!user || user.status !== "active") throw notFound("user_not_found", "用户不存在或不是 active");
+
+      const contexts = await loadBonusContexts(db, [body.user_id]);
+      const context = contexts.get(body.user_id);
+      if (!context) throw notFound("user_not_found", "用户不存在或不是 active");
+
+      let evaluation;
+      try {
+        compileFormula(body.formula);
+        evaluation = evaluateFormula(body.formula, context);
+      } catch (error) {
+        if (error instanceof FormulaError) {
+          throw new HttpProblem(
+            400,
+            "invalid_formula",
+            `公式错误（${String(error.line)}:${String(error.column)}）：${error.message}`,
+          );
+        }
+        throw error;
+      }
+
+      return bonusFormulaSimulateResponse.parse({
+        user_id: Number(user.id),
+        username: user.username,
+        result: evaluation.result,
+        variables: evaluation.variables,
+        torrents: evaluation.torrents,
+        warnings: evaluation.warnings,
+      });
     });
 
     app.get(`${API_PREFIX}/staff/sections`, async (request) => {

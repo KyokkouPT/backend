@@ -66,6 +66,7 @@ export const PERMISSIONS = {
   staffClassHistory: "staff.class_history",
   classAutoPromote: "class.auto_promote",
   classAutoDemote: "class.auto_demote",
+  userDonor: "user.donor",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -245,6 +246,7 @@ export const torrentSummary = z.object({
   created_at: z.number(),
   tags: z.array(z.string()),
   meta: z.record(z.union([z.string(), z.number(), z.boolean()])),
+  zero_bonus: z.boolean(),
   owned: z.boolean(),
   download_url: z.string(),
 });
@@ -410,6 +412,60 @@ export const uploadResponse = z.object({
   message: z.string(),
 });
 export type UploadResponse = z.infer<typeof uploadResponse>;
+
+export const zeroBonusBody = z.object({ zero_bonus: z.boolean() });
+export type ZeroBonusBody = z.infer<typeof zeroBonusBody>;
+
+export const zeroBonusResponse = z.object({ ok: z.boolean(), zero_bonus: z.boolean() });
+export type ZeroBonusResponse = z.infer<typeof zeroBonusResponse>;
+
+export const bonusFormulaTorrentTerm = z.object({
+  id: z.number().int(),
+  size_gb: z.number(),
+  age_weeks: z.number(),
+  seeders: z.number().int(),
+  weight: z.number(),
+  term: z.number(),
+});
+export type BonusFormulaTorrentTerm = z.infer<typeof bonusFormulaTorrentTerm>;
+
+export const bonusFormulaSample = z.object({
+  label: z.string(),
+  seeders: z.number().int(),
+  total_gb: z.number(),
+  result: z.number(),
+});
+export type BonusFormulaSample = z.infer<typeof bonusFormulaSample>;
+
+export const bonusFormulaPreviewBody = z.object({
+  formula: z.string().min(1).max(2000),
+});
+export type BonusFormulaPreviewBody = z.infer<typeof bonusFormulaPreviewBody>;
+
+export const bonusFormulaPreviewResponse = z.object({
+  result: z.number(),
+  variables: z.record(z.number()),
+  samples: z.array(bonusFormulaSample),
+  torrents: z.array(bonusFormulaTorrentTerm),
+  warnings: z.array(z.string()),
+});
+export type BonusFormulaPreviewResponse = z.infer<typeof bonusFormulaPreviewResponse>;
+
+export const bonusFormulaSimulateBody = z.object({
+  formula: z.string().min(1).max(2000),
+  user_id: z.number().int().positive(),
+});
+export type BonusFormulaSimulateBody = z.infer<typeof bonusFormulaSimulateBody>;
+
+export const bonusFormulaSimulateResponse = z.object({
+  user_id: z.number().int(),
+  username: z.string(),
+  result: z.number(),
+  variables: z.record(z.number()),
+  torrents: z.array(bonusFormulaTorrentTerm),
+  warnings: z.array(z.string()),
+});
+export type BonusFormulaSimulateResponse = z.infer<typeof bonusFormulaSimulateResponse>;
 
 export const reviewReason = z.object({
   key: z.string(),
@@ -852,6 +908,12 @@ export const staffSettings = z.object({
     recalc_cron: z.string().min(5).max(64),
     next_run_at: z.number().nullable().optional(),
   }),
+  bonus: z.object({
+    cron: z.string().min(5).max(64),
+    formula: z.string().min(1).max(2000),
+    next_run_at: z.number().nullable().optional(),
+    default_formula: z.string().optional(),
+  }),
 });
 export type StaffSettings = z.infer<typeof staffSettings>;
 
@@ -865,6 +927,7 @@ export const updateStaffSettingsBody = z.object({
   economy: staffSettings.shape.economy.partial().optional(),
   review: staffSettings.shape.review.partial().optional(),
   classes: staffSettings.shape.classes.omit({ next_run_at: true }).partial().optional(),
+  bonus: staffSettings.shape.bonus.omit({ next_run_at: true, default_formula: true }).partial().optional(),
 });
 export type UpdateStaffSettingsBody = z.infer<typeof updateStaffSettingsBody>;
 
@@ -979,7 +1042,7 @@ export const staffUpdateUserBody = z.object({
   /** 计入下载量（不改变实际下载 raw_downloaded）。 */
   downloaded: z.number().int().min(0).optional(),
   /** 魔力值余额。 */
-  bonus: z.number().int().min(0).optional(),
+  bonus: z.number().min(0).optional(),
   /** @deprecated 兼容旧客户端；优先使用 class_slug。 */
   role: role.optional(),
   /** @deprecated 兼容旧客户端；优先使用 class_slug。 */

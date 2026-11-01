@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { API_PREFIX } from "@kyokkou/contracts";
-import { validateCronExpression } from "../src/lib/class-scheduler.js";
+import { validateCronExpression } from "../src/lib/scheduler.js";
 import { createTestContext, login, TEST_PASSWORD, type LoggedIn, type TestContext } from "./helpers.js";
 
 let ctx: TestContext;

@@ -39,6 +39,8 @@ export type UserClassContext = {
   classById: Map<number, ClassRow>;
   classBySlug: Map<string, ClassRow>;
   rules: ClassRules;
+  /** 预加载的 user_class_progress：`userId:targetClassId` -> first_met_at。 */
+  progress?: Map<string, number>;
 };
 
 export type RecalcUser = {
@@ -177,20 +179,24 @@ export async function decidePromotion(
 
     const graceDays = Number(next.promote_grace_days);
     if (graceDays > 0) {
-      const progress = await db
-        .selectFrom("user_class_progress")
-        .selectAll()
-        .where("user_id", "=", userId)
-        .where("target_class_id", "=", Number(next.id))
-        .executeTakeFirst();
-      if (!progress) {
+      const progressKey = `${String(userId)}:${String(next.id)}`;
+      const firstMet =
+        ctx.progress?.get(progressKey) ??
+        (await db
+          .selectFrom("user_class_progress")
+          .select("first_met_at")
+          .where("user_id", "=", userId)
+          .where("target_class_id", "=", Number(next.id))
+          .executeTakeFirst()
+          .then((row) => (row ? Number(row.first_met_at) : undefined)));
+      if (firstMet === undefined) {
         return {
           steps,
           missing: [],
           blocked: { from: cursor, to: next, graceDays, graceSatisfied: false },
         };
       }
-      if (now - Number(progress.first_met_at) < graceDays * 86_400_000) {
+      if (now - firstMet < graceDays * 86_400_000) {
         return {
           steps,
           missing: [],

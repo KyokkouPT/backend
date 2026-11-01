@@ -5,6 +5,8 @@ import {
   torrentDetail,
   torrentListResponse,
   uploadResponse,
+  zeroBonusBody,
+  zeroBonusResponse,
   type TorrentDetail,
 } from "@kyokkou/contracts";
 import type { AppConfig } from "../config.js";
@@ -16,6 +18,7 @@ import { parseTorrent, rewriteAnnounce } from "../lib/bencode.js";
 import { parseDownHashUid, verifyDownHash } from "../lib/downhash.js";
 import { HttpProblem, badRequest, conflict, notFound, unauthorized } from "../lib/problem.js";
 import { loadSettings } from "../lib/settings.js";
+import { parseOrThrow } from "../lib/validate.js";
 import { listTorrents, loadTorrentDetail, type TorrentFilters, type TorrentSort } from "../lib/torrent-query.js";
 import { numberCount } from "../lib/serialize.js";
 
@@ -217,6 +220,7 @@ export function torrentRoutes(deps: { db: Db; config: AppConfig }): FastifyPlugi
       }
 
       const promo = fields.promo && PROMO_VALUES.has(fields.promo) ? fields.promo : "none";
+      const zeroBonus = fields.zero_bonus === "true" || fields.zero_bonus === "1";
       const name = (fields.name?.trim() || parsed.name).slice(0, 255);
       const description = fields.description?.trim() ? fields.description.trim() : null;
 
@@ -248,6 +252,7 @@ export function torrentRoutes(deps: { db: Db; config: AppConfig }): FastifyPlugi
           files_count: parsed.files.length,
           status,
           promo,
+          zero_bonus: zeroBonus ? 1 : 0,
           seeders: 0,
           leechers: 0,
           completed: 0,
@@ -305,7 +310,7 @@ export function torrentRoutes(deps: { db: Db; config: AppConfig }): FastifyPlugi
           action: "torrent.upload",
           target_type: "torrent",
           target_id: String(torrentId),
-          detail_json: JSON.stringify({ info_hash: parsed.infoHash, status }),
+          detail_json: JSON.stringify({ info_hash: parsed.infoHash, status, zero_bonus: zeroBonus }),
           ip: request.ip,
           created_at: now,
         })
@@ -318,6 +323,45 @@ export function torrentRoutes(deps: { db: Db; config: AppConfig }): FastifyPlugi
           message: status === "approved" ? "已通过审核并公开" : "已提交，等待审核",
         }),
       );
+    });
+
+    app.put(`${API_PREFIX}/torrents/:id/zero-bonus`, async (request) => {
+      const auth = requireAuth(request);
+      assertCsrf(request, auth.session);
+      const id = Number((request.params as { id: string }).id);
+      if (!Number.isInteger(id) || id <= 0) throw notFound("torrent_not_found", "种子不存在");
+      const body = parseOrThrow(zeroBonusBody, request.body ?? {});
+
+      const torrent = await db
+        .selectFrom("torrents")
+        .select(["id", "uploader_id", "deleted_at"])
+        .where("id", "=", id)
+        .executeTakeFirst();
+      if (!torrent || torrent.deleted_at !== null) throw notFound("torrent_not_found", "种子不存在");
+
+      const owner = Number(torrent.uploader_id) === Number(auth.user.id);
+      const canEdit = owner || auth.permissions.includes("torrent.edit");
+      if (!canEdit) throw new HttpProblem(403, "forbidden", "没有权限修改该种子");
+
+      await db
+        .updateTable("torrents")
+        .set({ zero_bonus: body.zero_bonus ? 1 : 0 })
+        .where("id", "=", id)
+        .execute();
+      await db
+        .insertInto("audit_logs")
+        .values({
+          actor_id: Number(auth.user.id),
+          action: "torrent.zero_bonus",
+          target_type: "torrent",
+          target_id: String(id),
+          detail_json: JSON.stringify({ zero_bonus: body.zero_bonus }),
+          ip: request.ip,
+          created_at: Date.now(),
+        })
+        .execute();
+
+      return zeroBonusResponse.parse({ ok: true, zero_bonus: body.zero_bonus });
     });
 
     app.get("/t/:id/download", async (request, reply) => {

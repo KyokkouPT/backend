@@ -247,6 +247,17 @@ export async function runClassRecalc(db: Db, options: RecalcOptions): Promise<Re
     .execute();
   const hnrByUser = new Map(hnrRows.map((row) => [Number(row.user_id), Number(row.count)]));
 
+  const progressRows = await db
+    .selectFrom("user_class_progress")
+    .select(["user_id", "target_class_id", "first_met_at"])
+    .execute();
+  const progressByUser = new Map(
+    progressRows.map((row) => [
+      `${String(row.user_id)}:${String(row.target_class_id)}`,
+      Number(row.first_met_at),
+    ]),
+  );
+
   const now = Date.now();
   let scanned = 0;
   let promoted = 0;
@@ -266,7 +277,7 @@ export async function runClassRecalc(db: Db, options: RecalcOptions): Promise<Re
         invitesUsed: invitesByUser.get(Number(user.id)) ?? 0,
         hnrUnfinished: hnrByUser.get(Number(user.id)) ?? 0,
       });
-      const ctx: UserClassContext = { metrics, classes, classById, classBySlug, rules };
+      const ctx: UserClassContext = { metrics, classes, classById, classBySlug, rules, progress: progressByUser };
 
       const historyUser = { id: Number(user.id), class_id: user.class_id, username: user.username };
 

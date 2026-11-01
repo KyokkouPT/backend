@@ -11,7 +11,7 @@ import {
 import type { AppConfig } from "../config.js";
 import type { Db } from "../db/db.js";
 import { assertCsrf, requireAuth } from "../auth/csrf.js";
-import { settleBonus } from "../lib/bonus.js";
+import { evaluateBonusRate } from "../lib/bonus.js";
 import { signDownHash } from "../lib/downhash.js";
 import { badRequest, conflict, forbidden, notFound } from "../lib/problem.js";
 import { loadSettings } from "../lib/settings.js";
@@ -125,7 +125,7 @@ export function economyRoutes(deps: { db: Db; config: AppConfig }): FastifyPlugi
 
     app.get(`${API_PREFIX}/me/bonus`, async (request) => {
       const auth = requireAuth(request);
-      const settled = await settleBonus(db, auth.user);
+      const bonusRate = await evaluateBonusRate(db, auth.user);
 
       const [ledgerRows, itemRows] = await Promise.all([
         db
@@ -144,9 +144,9 @@ export function economyRoutes(deps: { db: Db; config: AppConfig }): FastifyPlugi
       ]);
 
       return bonusResponse.parse({
-        balance: settled.balance,
-        yield_per_hour: settled.yieldPerHour,
-        frozen_until: settled.frozenUntil,
+        balance: Number(auth.user.bonus),
+        yield_per_hour: bonusRate.rate,
+        frozen_until: bonusRate.frozen ? auth.user.bonus_frozen_until : null,
         ledger: ledgerRows.map(toLedgerEntry),
         items: itemRows.map(toExchangeItem),
       });
