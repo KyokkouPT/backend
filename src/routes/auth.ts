@@ -84,8 +84,14 @@ export function authRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginAs
           ? await verifyPassword(user.password_hash, body.password)
           : (await runDummyKdf(body.password), false);
 
-        if (!user || !valid || user.status !== "active") {
+        if (!user || !valid) {
           throw new HttpProblem(401, "invalid_credentials", "用户名或密码不正确");
+        }
+        if (user.status === "banned") {
+          throw new HttpProblem(403, "account_banned", "账号已被封禁，请通过申诉入口提交申诉");
+        }
+        if (user.status !== "active" && user.status !== "suspended") {
+          throw new HttpProblem(403, "account_unavailable", "账号当前不可登录");
         }
 
         // 已启用 2FA：必须提供 TOTP 或一次性恢复码。

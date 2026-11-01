@@ -144,7 +144,7 @@ describe("auth / csrf", () => {
     expect(me.statusCode).toBe(401);
   });
 
-  it("refuses login for a banned user", async () => {
+  it("returns a distinct error for a banned user", async () => {
     await ctx.db
       .updateTable("users")
       .set({ status: "banned" })
@@ -161,8 +161,45 @@ describe("auth / csrf", () => {
       payload: { username: "axue", password: TEST_PASSWORD },
     });
 
-    expect(res.statusCode).toBe(401);
-    expect((res.json() as { code: string }).code).toBe("invalid_credentials");
+    expect(res.statusCode).toBe(403);
+    expect((res.json() as { code: string }).code).toBe("account_banned");
+
+    const wrongPassword = await ctx.app.inject({
+      method: "POST",
+      url: `${API_PREFIX}/auth/login`,
+      headers: { cookie: `kp_csrf=${csrfToken}`, "x-csrf-token": csrfToken },
+      payload: { username: "axue", password: "wrong-password" },
+    });
+    expect(wrongPassword.statusCode).toBe(401);
+    expect((wrongPassword.json() as { code: string }).code).toBe("invalid_credentials");
+
+    await ctx.db.updateTable("users").set({ status: "active" }).where("username", "=", "axue").execute();
+  });
+
+  it("lets a suspended user log in with no permissions", async () => {
+    await ctx.db
+      .updateTable("users")
+      .set({ status: "suspended" })
+      .where("username", "=", "axue")
+      .execute();
+
+    const session = await login(ctx.app, "axue", TEST_PASSWORD);
+    const me = await ctx.app.inject({
+      method: "GET",
+      url: `${API_PREFIX}/auth/me`,
+      headers: { cookie: session.cookieHeader },
+    });
+    expect(me.statusCode).toBe(200);
+    const body = me.json() as { user: { status: string }; permissions: string[] };
+    expect(body.user.status).toBe("suspended");
+    expect(body.permissions).toEqual([]);
+
+    const staffPage = await ctx.app.inject({
+      method: "GET",
+      url: `${API_PREFIX}/staff/users`,
+      headers: { cookie: session.cookieHeader },
+    });
+    expect(staffPage.statusCode).toBe(403);
 
     await ctx.db.updateTable("users").set({ status: "active" }).where("username", "=", "axue").execute();
   });

@@ -81,9 +81,9 @@ export async function resolveSessionByToken(db: Db, token: string): Promise<Auth
     .where("id", "=", session.user_id)
     .executeTakeFirst();
 
-  // 停用/封禁用户立即失效：不续用旧 session。
-  if (!user || user.status !== "active") {
-    await db.deleteFrom("sessions").where("id", "=", session.id).execute();
+  // 封禁用户立即失效；停用用户可以登录，但权限为空。
+  if (!user || user.status === "banned") {
+    if (user) await db.deleteFrom("sessions").where("id", "=", session.id).execute();
     return null;
   }
 
@@ -92,7 +92,8 @@ export async function resolveSessionByToken(db: Db, token: string): Promise<Auth
       ? await loadClassBySlug(db, "user")
       : await loadClassById(db, Number(user.class_id));
   const overrides = await loadOverrides(db, Number(user.id));
-  const permissions = computePermissions(classRow, overrides);
+  const permissions =
+    user.status === "suspended" ? [] : computePermissions(classRow, overrides);
 
   return { session, user, class: classRow, permissions };
 }

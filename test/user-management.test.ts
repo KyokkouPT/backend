@@ -56,7 +56,7 @@ describe("staff user management", () => {
     expect(staffer.username).toBe("staffer");
   });
 
-  it("updates role/status and revokes sessions on suspend", async () => {
+  it("updates role/status and lets suspended users log in without permissions", async () => {
     const id = await findUser("staffer");
     const updated = await ctx.app.inject({
       method: "PUT",
@@ -66,8 +66,24 @@ describe("staff user management", () => {
     });
     expect(updated.statusCode).toBe(200);
 
-    const staffer = await login(ctx.app, "staffer", "staffer-pass-123").catch(() => null);
-    expect(staffer).toBeNull();
+    const staffer = await login(ctx.app, "staffer", "staffer-pass-123");
+    const me = await ctx.app.inject({
+      method: "GET",
+      url: `${API_PREFIX}/auth/me`,
+      headers: { cookie: staffer.cookieHeader },
+    });
+    expect(me.statusCode).toBe(200);
+    expect((me.json() as { user: { status: string }; permissions: string[] }).user.status).toBe(
+      "suspended",
+    );
+    expect((me.json() as { permissions: string[] }).permissions).toEqual([]);
+
+    const forbidden = await ctx.app.inject({
+      method: "GET",
+      url: `${API_PREFIX}/staff/users`,
+      headers: { cookie: staffer.cookieHeader },
+    });
+    expect(forbidden.statusCode).toBe(403);
 
     await ctx.app.inject({
       method: "PUT",
