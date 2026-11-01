@@ -1,7 +1,8 @@
 import type { FastifyPluginAsync } from "fastify";
-import { API_PREFIX, notificationsResponse } from "@kyokkou/contracts";
+import { API_PREFIX, notificationItem, notificationsResponse } from "@kyokkou/contracts";
 import type { Db } from "../db/db.js";
 import { assertCsrf, requireAuth } from "../auth/csrf.js";
+import { notFound } from "../lib/problem.js";
 import { unreadNotificationCount } from "../lib/notifications.js";
 
 export function notificationRoutes(deps: { db: Db }): FastifyPluginAsync {
@@ -34,6 +35,30 @@ export function notificationRoutes(deps: { db: Db }): FastifyPluginAsync {
           created_at: Number(row.created_at),
         })),
         unread,
+      });
+    });
+
+    app.get(`${API_PREFIX}/notifications/:id`, async (request) => {
+      const auth = requireAuth(request);
+      const id = Number((request.params as { id: string }).id);
+      if (!Number.isInteger(id) || id <= 0) {
+        throw notFound("notification_not_found", "通知不存在");
+      }
+      const row = await db
+        .selectFrom("notifications")
+        .selectAll()
+        .where("id", "=", id)
+        .where("user_id", "=", Number(auth.user.id))
+        .executeTakeFirst();
+      if (!row) throw notFound("notification_not_found", "通知不存在");
+      return notificationItem.parse({
+        id: Number(row.id),
+        kind: row.kind,
+        title: row.title,
+        body: row.body,
+        link_url: row.link_url,
+        read_at: row.read_at === null ? null : Number(row.read_at),
+        created_at: Number(row.created_at),
       });
     });
 

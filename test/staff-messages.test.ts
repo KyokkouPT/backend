@@ -66,10 +66,32 @@ describe("staff mass messages", () => {
       url: `${API_PREFIX}/notifications`,
       headers: { cookie: axue.cookieHeader },
     });
-    const items = (notifications.json() as { items: { kind: string; title: string }[] }).items;
-    expect(items.some((item) => item.kind === "broadcast" && item.title === "指定用户通知")).toBe(
-      true,
+    const items = (notifications.json() as { items: { id: number; kind: string; title: string }[] }).items;
+    const delivered = items.find(
+      (item) => item.kind === "broadcast" && item.title === "指定用户通知",
     );
+    expect(delivered).toBeTruthy();
+
+    const detail = await ctx.app.inject({
+      method: "GET",
+      url: `${API_PREFIX}/notifications/${String(delivered?.id ?? 0)}`,
+      headers: { cookie: axue.cookieHeader },
+    });
+    expect(detail.statusCode).toBe(200);
+    expect((detail.json() as { read_at: number | null }).read_at).toBeNull();
+
+    const read = await ctx.app.inject({
+      method: "POST",
+      url: `${API_PREFIX}/notifications/${String(delivered?.id ?? 0)}/read`,
+      headers: { cookie: axue.cookieHeader, "x-csrf-token": axue.csrfToken },
+    });
+    expect(read.statusCode).toBe(200);
+    const after = await ctx.app.inject({
+      method: "GET",
+      url: `${API_PREFIX}/notifications/${String(delivered?.id ?? 0)}`,
+      headers: { cookie: axue.cookieHeader },
+    });
+    expect((after.json() as { read_at: number | null }).read_at).not.toBeNull();
 
     const audit = await ctx.db
       .selectFrom("audit_logs")
