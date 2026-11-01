@@ -145,6 +145,101 @@ describe("class system", () => {
     expect(body.permissions.some((p) => p.startsWith("staff."))).toBe(false);
   });
 
+  it("does not demote when the demote rule exists but is not triggered", async () => {
+    const target = await userId("root");
+    const advanced = await ctx.db
+      .selectFrom("classes")
+      .select("id")
+      .where("slug", "=", "advanced")
+      .executeTakeFirstOrThrow();
+    await ctx.db
+      .updateTable("classes")
+      .set({ demote_grace_days: 0 })
+      .where("id", "=", advanced.id)
+      .execute();
+    await ctx.db
+      .updateTable("users")
+      .set({
+        class_id: Number(advanced.id),
+        class_key: "advanced",
+        created_at: Date.now(),
+        uploaded: 100 * 1024 ** 3,
+        downloaded: 50 * 1024 ** 3,
+        demote_due_at: null,
+      })
+      .where("id", "=", target)
+      .execute();
+
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `${API_PREFIX}/staff/classes/recalc`,
+      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(200);
+    const row = await ctx.db
+      .selectFrom("users as u")
+      .innerJoin("classes as c", "c.id", "u.class_id")
+      .select(["c.slug", "u.demote_due_at"])
+      .where("u.id", "=", target)
+      .executeTakeFirstOrThrow();
+    expect(row.slug).toBe("advanced");
+    expect(row.demote_due_at).toBeNull();
+  });
+
+  it("uses the promotion rule when no demote rule exists", async () => {
+    const target = await userId("root");
+    const advanced = await ctx.db
+      .selectFrom("classes")
+      .select("id")
+      .where("slug", "=", "advanced")
+      .executeTakeFirstOrThrow();
+    await ctx.db
+      .updateTable("classes")
+      .set({ demote_rule_json: null, demote_grace_days: 0 })
+      .where("id", "=", advanced.id)
+      .execute();
+    await ctx.db
+      .updateTable("users")
+      .set({
+        class_id: Number(advanced.id),
+        class_key: "advanced",
+        created_at: Date.now(),
+        uploaded: 100 * 1024 ** 3,
+        downloaded: 50 * 1024 ** 3,
+        demote_due_at: null,
+      })
+      .where("id", "=", target)
+      .execute();
+
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `${API_PREFIX}/staff/classes/recalc`,
+      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(200);
+    const row = await ctx.db
+      .selectFrom("users as u")
+      .innerJoin("classes as c", "c.id", "u.class_id")
+      .select("c.slug")
+      .where("u.id", "=", target)
+      .executeTakeFirstOrThrow();
+    expect(row.slug).toBe("user");
+
+    await ctx.db
+      .updateTable("classes")
+      .set({
+        demote_rule_json: JSON.stringify({
+          logic: "any",
+          conditions: [{ metric: "ratio", op: "<", value: 1.45 }],
+        }),
+        demote_grace_days: 7,
+      })
+      .where("id", "=", advanced.id)
+      .execute();
+  });
+
   it("runs recalc: promotes eligible users and demotes when ratio drops", async () => {
     const target = await userId("axue");
     const userClass = await ctx.db
