@@ -31,19 +31,27 @@ describe("staff settings", () => {
       headers: { cookie: admin.cookieHeader },
     });
     expect(current.statusCode).toBe(200);
-    const settings = (current.json() as { settings: { site: { name: string } } }).settings;
+    const settings = (current.json() as { settings: { site: { name: string }; registration: { closed_registration_mode: string } } }).settings;
     expect(settings.site.name.length).toBeGreaterThan(0);
+    expect(settings.registration.closed_registration_mode).toBe("auto");
 
     const updated = await ctx.app.inject({
       method: "PUT",
       url: `${API_PREFIX}/staff/settings`,
       headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
-      payload: { site: { tagline: "新的副标题" }, registration: { open: true } },
+      payload: {
+        site: { tagline: "新的副标题" },
+        registration: { open: true, closed_registration_mode: "message" },
+      },
     });
     expect(updated.statusCode).toBe(200);
     expect((updated.json() as { settings: { site: { tagline: string } } }).settings.site.tagline).toBe(
       "新的副标题",
     );
+    expect(
+      (updated.json() as { settings: { registration: { closed_registration_mode: string } } }).settings
+        .registration.closed_registration_mode,
+    ).toBe("message");
 
     const publicSite = await ctx.app.inject({ method: "GET", url: `${API_PREFIX}/site` });
     expect((publicSite.json() as { name: string }).name.length).toBeGreaterThan(0);

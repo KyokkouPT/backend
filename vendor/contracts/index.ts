@@ -103,6 +103,7 @@ export const siteRegistration = z.object({
   open: z.boolean(),
   invite_registration_enabled: z.boolean(),
   closed_message: z.string(),
+  closed_registration_mode: z.enum(["auto", "form", "message"]),
 });
 export type SiteRegistration = z.infer<typeof siteRegistration>;
 
@@ -1014,6 +1015,7 @@ export const staffSettings = z.object({
     open: z.boolean(),
     invite_registration_enabled: z.boolean(),
     closed_message: z.string().max(500),
+    closed_registration_mode: z.enum(["auto", "form", "message"]),
   }),
   tracker: z.object({
     announce_interval: z.number().int().min(60),
