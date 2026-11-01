@@ -145,6 +145,92 @@ describe("class system", () => {
     expect(body.permissions.some((p) => p.startsWith("staff."))).toBe(false);
   });
 
+  it("warns once per continuous demotion episode and again after recovery", async () => {
+    const target = await userId("root");
+    const advanced = await ctx.db
+      .selectFrom("classes")
+      .select(["id", "demote_rule_json"])
+      .where("slug", "=", "advanced")
+      .executeTakeFirstOrThrow();
+    await ctx.db
+      .updateTable("classes")
+      .set({ demote_grace_days: 7 })
+      .where("id", "=", advanced.id)
+      .execute();
+    await ctx.db
+      .updateTable("users")
+      .set({
+        class_id: Number(advanced.id),
+        class_key: "advanced",
+        created_at: Date.now() - 60 * 86_400_000,
+        uploaded: 0,
+        downloaded: 50 * 1024 ** 3,
+        demote_due_at: null,
+      })
+      .where("id", "=", target)
+      .execute();
+
+    const warningCount = async (): Promise<number> => {
+      const rows = await ctx.db
+        .selectFrom("notifications")
+        .select((eb) => eb.fn.countAll<number>().as("count"))
+        .where("user_id", "=", target)
+        .where("title", "=", "等级调整预告")
+        .executeTakeFirst();
+      return Number(rows?.count ?? 0);
+    };
+    const before = await warningCount();
+
+    const recalc = () =>
+      ctx.app.inject({
+        method: "POST",
+        url: `${API_PREFIX}/staff/classes/recalc`,
+        headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
+        payload: {},
+      });
+
+    expect((await recalc()).statusCode).toBe(200);
+    expect(await warningCount()).toBe(before + 1);
+    const firstDue = await ctx.db
+      .selectFrom("users")
+      .select("demote_due_at")
+      .where("id", "=", target)
+      .executeTakeFirstOrThrow();
+    expect(firstDue.demote_due_at).not.toBeNull();
+
+    // 连续不达标：不重复发预告。
+    expect((await recalc()).statusCode).toBe(200);
+    expect(await warningCount()).toBe(before + 1);
+
+    // 达标一次：清除 due；再次不达标则重新发预告。
+    await ctx.db
+      .updateTable("users")
+      .set({ uploaded: 100 * 1024 ** 3 })
+      .where("id", "=", target)
+      .execute();
+    expect((await recalc()).statusCode).toBe(200);
+    const recovered = await ctx.db
+      .selectFrom("users")
+      .select("demote_due_at")
+      .where("id", "=", target)
+      .executeTakeFirstOrThrow();
+    expect(recovered.demote_due_at).toBeNull();
+
+    await ctx.db
+      .updateTable("users")
+      .set({ uploaded: 0 })
+      .where("id", "=", target)
+      .execute();
+    expect((await recalc()).statusCode).toBe(200);
+    expect(await warningCount()).toBe(before + 2);
+
+    await ctx.db
+      .updateTable("classes")
+      .set({ demote_grace_days: 7, demote_rule_json: advanced.demote_rule_json })
+      .where("id", "=", advanced.id)
+      .execute();
+  });
+
   it("does not demote when the demote rule exists but is not triggered", async () => {
     const target = await userId("root");
     const advanced = await ctx.db
