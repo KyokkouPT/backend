@@ -37,6 +37,7 @@ describe("migrations", () => {
         { version: 7, name: "moderation" },
         { version: 8, name: "classes" },
         { version: 9, name: "class_simulator" },
+        { version: 10, name: "raw_traffic" },
       ]);
 
       const users = await db.selectFrom("users").selectAll().execute();

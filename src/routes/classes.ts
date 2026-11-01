@@ -144,6 +144,8 @@ async function loadSimulationContext(
     last_seen_at: row.last_seen_at === null ? null : Number(row.last_seen_at),
     uploaded: Number(row.uploaded),
     downloaded: Number(row.downloaded),
+    raw_uploaded: Number(row.raw_uploaded ?? 0),
+    raw_downloaded: Number(row.raw_downloaded ?? 0),
     bonus: Number(row.bonus),
     seedtime: Number(row.seedtime),
     warnings: Number(row.warnings ?? 0),

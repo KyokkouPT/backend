@@ -208,6 +208,8 @@ export async function runClassRecalc(db: Db, options: RecalcOptions): Promise<Re
       "last_seen_at",
       "uploaded",
       "downloaded",
+      "raw_uploaded",
+      "raw_downloaded",
       "bonus",
       "seedtime",
       "warnings",

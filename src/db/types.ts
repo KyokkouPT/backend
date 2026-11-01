@@ -54,6 +54,9 @@ export interface UsersTable {
   status: UserStatus;
   uploaded: number;
   downloaded: number;
+  /** Tracker 实际上报流量（不打折、不受魔力兑换影响）。 */
+  raw_uploaded: number;
+  raw_downloaded: number;
   bonus: number;
   seedtime: number;
   invited_by: number | null;

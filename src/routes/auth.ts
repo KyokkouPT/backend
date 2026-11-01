@@ -203,6 +203,8 @@ export function authRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginAs
               class_key: "user",
               class_id: defaultClass ? Number(defaultClass.id) : null,
               warnings: 0,
+              raw_uploaded: 0,
+              raw_downloaded: 0,
               invite_balance: defaultClass?.invite_quota ?? 0,
               class_locked_until: null,
               demote_due_at: null,

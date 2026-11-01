@@ -38,6 +38,8 @@ export function toUserSummary(
     status: user.status,
     uploaded: Number(user.uploaded),
     downloaded: Number(user.downloaded),
+    raw_uploaded: Number(user.raw_uploaded ?? 0),
+    raw_downloaded: Number(user.raw_downloaded ?? 0),
     bonus: Number(user.bonus),
     ratio: ratioFor(Number(user.uploaded), Number(user.downloaded)),
     seedtime: Number(user.seedtime),

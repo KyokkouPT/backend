@@ -249,7 +249,7 @@ export function economyRoutes(deps: { db: Db; config: AppConfig }): FastifyPlugi
       await db.transaction().execute(async (trx) => {
         const current = await trx
           .selectFrom("users")
-          .select(["bonus", "uploaded", "invite_balance"])
+          .select(["bonus", "uploaded", "downloaded", "invite_balance"])
           .where("id", "=", Number(auth.user.id))
           .executeTakeFirstOrThrow();
 
@@ -257,16 +257,34 @@ export function economyRoutes(deps: { db: Db; config: AppConfig }): FastifyPlugi
         if (currentBalance < price) throw badRequest("insufficient_bonus", "魔力值不足");
 
         const nextBalance = currentBalance - price;
-        const nextUploaded =
-          payload.type === "upload" && typeof payload.amount === "number"
-            ? Number(current.uploaded) + Math.floor(payload.amount)
-            : Number(current.uploaded);
+        const amount =
+          typeof payload.amount === "number" && Number.isFinite(payload.amount)
+            ? Math.floor(payload.amount)
+            : 0;
+        let nextUploaded = Number(current.uploaded);
+        let nextDownloaded = Number(current.downloaded);
+
+        if (payload.type === "upload") {
+          if (amount <= 0) throw badRequest("invalid_amount", "上传兑换额度无效");
+          nextUploaded += amount;
+        } else if (payload.type === "download_discount") {
+          if (amount <= 0) throw badRequest("invalid_amount", "下载减免额度无效");
+          if (nextDownloaded < amount) {
+            throw badRequest("insufficient_download", "减免额度超过当前计入下载量");
+          }
+          nextDownloaded -= amount;
+        }
         const nextInviteBalance =
           payload.type === "invite" ? Number(current.invite_balance) + 1 : Number(current.invite_balance);
 
         await trx
           .updateTable("users")
-          .set({ bonus: nextBalance, uploaded: nextUploaded, invite_balance: nextInviteBalance })
+          .set({
+            bonus: nextBalance,
+            uploaded: nextUploaded,
+            downloaded: nextDownloaded,
+            invite_balance: nextInviteBalance,
+          })
           .where("id", "=", Number(auth.user.id))
           .execute();
 
@@ -277,7 +295,12 @@ export function economyRoutes(deps: { db: Db; config: AppConfig }): FastifyPlugi
             kind: "exchange",
             delta: -price,
             balance_after: nextBalance,
-            ref_type: "exchange_item",
+            ref_type:
+              payload.type === "upload"
+                ? "upload_exchange"
+                : payload.type === "download_discount"
+                  ? "download_discount"
+                  : "exchange_item",
             ref_id: item.key,
             note: item.name,
             created_at: now,

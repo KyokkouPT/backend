@@ -93,13 +93,17 @@ export async function recordAnnounce(
     if (uploadDelta > 0 || downloadDelta > 0) {
       const currentUser = await trx
         .selectFrom("users")
-        .select(["uploaded", "downloaded"])
+        .select(["uploaded", "downloaded", "raw_uploaded", "raw_downloaded"])
         .where("id", "=", input.user.id)
         .executeTakeFirstOrThrow();
 
       await trx
         .updateTable("users")
         .set({
+          // 实际量：Tracker 上报原始增量，不打折、不受兑换影响。
+          raw_uploaded: Number(currentUser.raw_uploaded) + uploadDelta,
+          raw_downloaded: Number(currentUser.raw_downloaded) + downloadDelta,
+          // 计入量：促销系数；兑换在 economy 里单独增减。
           uploaded: Number(currentUser.uploaded) + Math.floor(uploadDelta * uploadFactor),
           downloaded: Number(currentUser.downloaded) + Math.floor(downloadDelta * downloadFactor),
         })

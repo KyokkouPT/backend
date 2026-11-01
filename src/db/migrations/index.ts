@@ -8,6 +8,7 @@ import { migration006 } from "./006_twofa.js";
 import { migration007 } from "./007_moderation.js";
 import { migration008 } from "./008_classes.js";
 import { migration009 } from "./009_class_simulator.js";
+import { migration010 } from "./010_raw_traffic.js";
 
 /** 有序迁移清单；新增迁移只追加，不改历史版本。 */
 export const migrations: Migration[] = [
@@ -20,6 +21,7 @@ export const migrations: Migration[] = [
   migration007,
   migration008,
   migration009,
+  migration010,
 ];
 
 export const LATEST_SCHEMA_VERSION = migrations.reduce(

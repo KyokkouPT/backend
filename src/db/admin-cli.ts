@@ -55,6 +55,8 @@ async function main(): Promise<void> {
             class_key: ownerClass?.slug ?? "owner",
             class_id: ownerClass ? Number(ownerClass.id) : null,
             warnings: 0,
+            raw_uploaded: 0,
+            raw_downloaded: 0,
             invite_balance: 0,
             class_locked_until: null,
             demote_due_at: null,

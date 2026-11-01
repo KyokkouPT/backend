@@ -75,6 +75,8 @@ export function userRoutes(deps: { db: Db }): FastifyPluginAsync {
         joined_at: Number(user.created_at),
         uploaded: Number(user.uploaded),
         downloaded: Number(user.downloaded),
+        raw_uploaded: Number(user.raw_uploaded ?? 0),
+        raw_downloaded: Number(user.raw_downloaded ?? 0),
         ratio: ratioFor(Number(user.uploaded), Number(user.downloaded)),
         seedtime: Number(user.seedtime),
         published_count: numberCount(publishedCount),

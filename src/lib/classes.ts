@@ -17,6 +17,8 @@ export type UserMetrics = {
   age_days: number;
   uploaded: number;
   downloaded: number;
+  raw_uploaded: number;
+  raw_downloaded: number;
   ratio: number;
   seedtime_hours: number;
   bonus: number;

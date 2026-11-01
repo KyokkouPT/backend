@@ -162,6 +162,14 @@ describe("tracker announce", () => {
       .executeTakeFirst();
 
     expect(obligation).toBeTruthy();
+
+    const rawRow = await ctx.db
+      .selectFrom("users")
+      .select(["raw_uploaded", "raw_downloaded"])
+      .where("username", "=", "阿雪")
+      .executeTakeFirstOrThrow();
+    expect(Number(rawRow.raw_uploaded)).toBeGreaterThanOrEqual(3000);
+    expect(Number(rawRow.raw_downloaded)).toBeGreaterThanOrEqual(downloaded);
     expect(obligation?.status).toBe("inspecting");
 
     await ctx.db

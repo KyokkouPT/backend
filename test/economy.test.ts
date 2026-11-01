@@ -87,6 +87,7 @@ describe("exchange", () => {
     const after = await user("lightbringer");
     expect(Number(before.bonus) - Number(after.bonus)).toBe(5000);
     expect(Number(after.uploaded) - Number(before.uploaded)).toBe(10 * GB);
+    expect(Number(after.raw_uploaded)).toBe(Number(before.raw_uploaded));
     expect(body.balance).toBe(Number(after.bonus));
 
     const ledger = await ctx.db
@@ -127,6 +128,59 @@ describe("exchange", () => {
 
     expect(res.statusCode).toBe(400);
     expect((res.json() as { code: string }).code).toBe("insufficient_bonus");
+  });
+
+  it("discounts counted download without touching raw download", async () => {
+    await ctx.db
+      .insertInto("exchange_items")
+      .values({
+        key: "discount_5gb",
+        name: "减免 5GB 下载",
+        description: null,
+        price: 10,
+        inventory: null,
+        limit_per_user: null,
+        enabled: 1,
+        payload_json: JSON.stringify({ type: "download_discount", amount: 5 * GB }),
+        display_order: 98,
+      })
+      .execute();
+    await ctx.db
+      .insertInto("exchange_items")
+      .values({
+        key: "discount_100gb",
+        name: "减免 100GB 下载",
+        description: null,
+        price: 1,
+        inventory: null,
+        limit_per_user: null,
+        enabled: 1,
+        payload_json: JSON.stringify({ type: "download_discount", amount: 100 * GB }),
+        display_order: 99,
+      })
+      .execute();
+
+    const before = await user("阿雪");
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `${API_PREFIX}/me/exchange/discount_5gb`,
+      headers: { cookie: axue.cookieHeader, "x-csrf-token": axue.csrfToken },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(200);
+
+    const after = await user("阿雪");
+    expect(Number(before.downloaded) - Number(after.downloaded)).toBe(5 * GB);
+    expect(Number(after.raw_downloaded)).toBe(Number(before.raw_downloaded));
+
+    const over = await ctx.app.inject({
+      method: "POST",
+      url: `${API_PREFIX}/me/exchange/discount_100gb`,
+      headers: { cookie: axue.cookieHeader, "x-csrf-token": axue.csrfToken },
+      payload: {},
+    });
+    expect(over.statusCode).toBe(400);
+    expect((over.json() as { code: string }).code).toBe("insufficient_download");
   });
 
   it("rejects while bonus is frozen and reports zero yield", async () => {

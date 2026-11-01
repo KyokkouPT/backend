@@ -49,6 +49,8 @@ export type RecalcUser = {
   last_seen_at: number | null;
   uploaded: number;
   downloaded: number;
+  raw_uploaded: number;
+  raw_downloaded: number;
   bonus: number;
   seedtime: number;
   warnings: number | null;
@@ -70,6 +72,8 @@ export function buildMetrics(
     age_days: Math.max(0, Math.floor((now - Number(user.created_at)) / 86_400_000)),
     uploaded: Number(user.uploaded),
     downloaded: Number(user.downloaded),
+    raw_uploaded: Number(user.raw_uploaded),
+    raw_downloaded: Number(user.raw_downloaded),
     ratio: ratioOf(Number(user.uploaded), Number(user.downloaded)),
     seedtime_hours: Number(user.seedtime) / 3600,
     bonus: Number(user.bonus),
