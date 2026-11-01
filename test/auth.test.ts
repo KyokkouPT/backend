@@ -1,8 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { API_PREFIX } from "@kyokkou/contracts";
 import {
+  captchaPair,
   createTestContext,
   login,
+  loginResponse,
   setCookieValues,
   TEST_PASSWORD,
   type TestContext,
@@ -42,16 +44,32 @@ describe("auth / csrf", () => {
     expect((res.json() as { code: string }).code).toBe("csrf_invalid");
   });
 
-  it("rejects a wrong password with problem+json", async () => {
+  it("requires a valid graphical captcha", async () => {
     const csrfRes = await ctx.app.inject({ method: "GET", url: `${API_PREFIX}/auth/csrf` });
     const csrfToken = setCookieValues(csrfRes.headers).get("kp_csrf") ?? "";
+    const captcha = await captchaPair(ctx.app);
+    const image = await ctx.app.inject({ method: "GET", url: `${API_PREFIX}/auth/captcha` });
+    expect(image.statusCode).toBe(200);
+    expect(image.headers["content-type"]).toContain("image/svg+xml");
+    expect(image.headers["cache-control"]).toContain("no-store");
+    expect(image.body).toContain("<svg");
+    expect(captcha.code).toHaveLength(5);
 
     const res = await ctx.app.inject({
       method: "POST",
       url: `${API_PREFIX}/auth/login`,
-      headers: { cookie: `kp_csrf=${csrfToken}`, "x-csrf-token": csrfToken },
-      payload: { username: "lightbringer", password: "definitely-wrong" },
+      headers: {
+        cookie: `kp_csrf=${csrfToken}; ${captcha.cookie}`,
+        "x-csrf-token": csrfToken,
+      },
+      payload: { username: "lightbringer", password: TEST_PASSWORD, captcha_code: "00000" },
     });
+    expect(res.statusCode).toBe(400);
+    expect((res.json() as { code: string }).code).toBe("captcha_invalid");
+  });
+
+  it("rejects a wrong password with problem+json", async () => {
+    const res = await loginResponse(ctx.app, "lightbringer", "definitely-wrong");
 
     expect(res.statusCode).toBe(401);
     expect(res.headers["content-type"]).toContain("application/problem+json");
@@ -59,30 +77,14 @@ describe("auth / csrf", () => {
   });
 
   it("does not reveal whether the account exists", async () => {
-    const csrfRes = await ctx.app.inject({ method: "GET", url: `${API_PREFIX}/auth/csrf` });
-    const csrfToken = setCookieValues(csrfRes.headers).get("kp_csrf") ?? "";
-
-    const res = await ctx.app.inject({
-      method: "POST",
-      url: `${API_PREFIX}/auth/login`,
-      headers: { cookie: `kp_csrf=${csrfToken}`, "x-csrf-token": csrfToken },
-      payload: { username: "no-such-user", password: "whatever-123" },
-    });
+    const res = await loginResponse(ctx.app, "no-such-user", "whatever-123");
 
     expect(res.statusCode).toBe(401);
     expect((res.json() as { code: string }).code).toBe("invalid_credentials");
   });
 
   it("logs in, sets an httpOnly session, and returns the user", async () => {
-    const csrfRes = await ctx.app.inject({ method: "GET", url: `${API_PREFIX}/auth/csrf` });
-    const csrfToken = setCookieValues(csrfRes.headers).get("kp_csrf") ?? "";
-
-    const res = await ctx.app.inject({
-      method: "POST",
-      url: `${API_PREFIX}/auth/login`,
-      headers: { cookie: `kp_csrf=${csrfToken}`, "x-csrf-token": csrfToken },
-      payload: { username: "lightbringer", password: TEST_PASSWORD },
-    });
+    const res = await loginResponse(ctx.app, "lightbringer", TEST_PASSWORD);
 
     expect(res.statusCode).toBe(200);
     const body = res.json() as { user: { username: string; role: string }; csrf_token: string };
@@ -151,25 +153,12 @@ describe("auth / csrf", () => {
       .where("username", "=", "axue")
       .execute();
 
-    const csrfRes = await ctx.app.inject({ method: "GET", url: `${API_PREFIX}/auth/csrf` });
-    const csrfToken = setCookieValues(csrfRes.headers).get("kp_csrf") ?? "";
-
-    const res = await ctx.app.inject({
-      method: "POST",
-      url: `${API_PREFIX}/auth/login`,
-      headers: { cookie: `kp_csrf=${csrfToken}`, "x-csrf-token": csrfToken },
-      payload: { username: "axue", password: TEST_PASSWORD },
-    });
+    const res = await loginResponse(ctx.app, "axue", TEST_PASSWORD);
 
     expect(res.statusCode).toBe(403);
     expect((res.json() as { code: string }).code).toBe("account_banned");
 
-    const wrongPassword = await ctx.app.inject({
-      method: "POST",
-      url: `${API_PREFIX}/auth/login`,
-      headers: { cookie: `kp_csrf=${csrfToken}`, "x-csrf-token": csrfToken },
-      payload: { username: "axue", password: "wrong-password" },
-    });
+    const wrongPassword = await loginResponse(ctx.app, "axue", "wrong-password");
     expect(wrongPassword.statusCode).toBe(401);
     expect((wrongPassword.json() as { code: string }).code).toBe("invalid_credentials");
 

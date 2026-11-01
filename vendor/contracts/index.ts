@@ -318,8 +318,8 @@ export type CsrfResponse = z.infer<typeof csrfResponse>;
 export const loginRequest = z.object({
   username: z.string().min(1).max(190),
   password: z.string().min(1).max(200),
+  captcha_code: z.string().min(1).max(16),
   totp_code: z.string().max(16).optional(),
-  recovery_code: z.string().max(64).optional(),
 });
 export type LoginRequest = z.infer<typeof loginRequest>;
 

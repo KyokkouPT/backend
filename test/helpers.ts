@@ -58,22 +58,44 @@ export type LoggedIn = {
   username: string;
 };
 
+export async function captchaPair(app: FastifyInstance): Promise<{ cookie: string; code: string }> {
+  const res = await app.inject({ method: "GET", url: "/api/v1/auth/captcha" });
+  const cookie = setCookieValues(res.headers).get("kp_captcha");
+  if (!cookie) throw new Error("captcha cookie missing");
+  const code = [...res.body.matchAll(/<text[^>]*>([^<])<\/text>/g)]
+    .map((match) => match[1] ?? "")
+    .join("");
+  if (!code) throw new Error("captcha text missing");
+  return { cookie: `kp_captcha=${cookie}`, code };
+}
+
+export async function loginResponse(
+  app: FastifyInstance,
+  username: string,
+  password: string,
+  extra: Record<string, unknown> = {},
+) {
+  const csrfRes = await app.inject({ method: "GET", url: "/api/v1/auth/csrf" });
+  const csrfToken = setCookieValues(csrfRes.headers).get("kp_csrf");
+  if (!csrfToken) throw new Error("csrf cookie missing");
+  const captcha = await captchaPair(app);
+  return app.inject({
+    method: "POST",
+    url: "/api/v1/auth/login",
+    headers: {
+      cookie: `kp_csrf=${csrfToken}; ${captcha.cookie}`,
+      "x-csrf-token": csrfToken,
+    },
+    payload: { username, password, captcha_code: captcha.code, ...extra },
+  });
+}
+
 export async function login(
   app: FastifyInstance,
   username = "lightbringer",
   password = TEST_PASSWORD,
 ): Promise<LoggedIn> {
-  const csrfRes = await app.inject({ method: "GET", url: "/api/v1/auth/csrf" });
-  const csrfCookies = setCookieValues(csrfRes.headers);
-  const csrfToken = csrfCookies.get("kp_csrf");
-  if (!csrfToken) throw new Error("csrf cookie missing");
-
-  const loginRes = await app.inject({
-    method: "POST",
-    url: "/api/v1/auth/login",
-    headers: { cookie: `kp_csrf=${csrfToken}`, "x-csrf-token": csrfToken },
-    payload: { username, password },
-  });
+  const loginRes = await loginResponse(app, username, password);
 
   if (loginRes.statusCode !== 200) {
     throw new Error(`login failed: ${String(loginRes.statusCode)} ${loginRes.body}`);

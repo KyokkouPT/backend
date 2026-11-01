@@ -4,6 +4,7 @@ import { totpCode } from "../src/lib/totp.js";
 import {
   createTestContext,
   login,
+  loginResponse,
   setCookieValues,
   TEST_PASSWORD,
   type LoggedIn,
@@ -95,7 +96,7 @@ describe("account settings", () => {
 });
 
 describe("two-factor auth", () => {
-  it("enables 2FA, requires codes, accepts recovery codes, and disables", async () => {
+  it("enables 2FA, requires TOTP, ignores recovery codes and disables", async () => {
     const setup = await ctx.app.inject({
       method: "POST",
       url: `${API_PREFIX}/me/2fa/setup`,
@@ -115,40 +116,21 @@ describe("two-factor auth", () => {
     const recoveryCodes = (enable.json() as { recovery_codes: string[] }).recovery_codes;
     expect(recoveryCodes).toHaveLength(8);
 
-    const { cookie, token } = await csrfPair();
-    const withoutCode = await ctx.app.inject({
-      method: "POST",
-      url: `${API_PREFIX}/auth/login`,
-      headers: { cookie, "x-csrf-token": token },
-      payload: { username: "lightbringer", password: TEST_PASSWORD },
-    });
+    const withoutCode = await loginResponse(ctx.app, "lightbringer", TEST_PASSWORD);
     expect(withoutCode.statusCode).toBe(401);
     expect((withoutCode.json() as { code: string }).code).toBe("twofa_required");
 
-    const withTotp = await ctx.app.inject({
-      method: "POST",
-      url: `${API_PREFIX}/auth/login`,
-      headers: { cookie, "x-csrf-token": token },
-      payload: { username: "lightbringer", password: TEST_PASSWORD, totp_code: totpCode(secret) },
+    const withTotp = await loginResponse(ctx.app, "lightbringer", TEST_PASSWORD, {
+      totp_code: totpCode(secret),
     });
     expect(withTotp.statusCode).toBe(200);
 
     const recovery = recoveryCodes[0] ?? "";
-    const withRecovery = await ctx.app.inject({
-      method: "POST",
-      url: `${API_PREFIX}/auth/login`,
-      headers: { cookie, "x-csrf-token": token },
-      payload: { username: "lightbringer", password: TEST_PASSWORD, recovery_code: recovery },
+    const withRecovery = await loginResponse(ctx.app, "lightbringer", TEST_PASSWORD, {
+      recovery_code: recovery,
     });
-    expect(withRecovery.statusCode).toBe(200);
-
-    const reused = await ctx.app.inject({
-      method: "POST",
-      url: `${API_PREFIX}/auth/login`,
-      headers: { cookie, "x-csrf-token": token },
-      payload: { username: "lightbringer", password: TEST_PASSWORD, recovery_code: recovery },
-    });
-    expect(reused.statusCode).toBe(401);
+    expect(withRecovery.statusCode).toBe(401);
+    expect((withRecovery.json() as { code: string }).code).toBe("twofa_required");
 
     const disable = await ctx.app.inject({
       method: "POST",

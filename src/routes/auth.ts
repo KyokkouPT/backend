@@ -30,6 +30,9 @@ import { loadSettings } from "../lib/settings.js";
 import { numberCount, toUserSummary } from "../lib/serialize.js";
 import { parseOrThrow } from "../lib/validate.js";
 import { normalizeUsername, validateUsername } from "../lib/username.js";
+import { createCaptcha, verifyCaptcha } from "../lib/captcha.js";
+
+const CAPTCHA_COOKIE = "kp_captcha";
 
 function usernameOrThrow(raw: string, allowAdmin = false): string {
   const checked = validateUsername(raw, { allowAdmin });
@@ -61,13 +64,32 @@ export function authRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginAs
       return csrfResponse.parse({ csrf_token: csrfToken });
     });
 
+    app.get(`${API_PREFIX}/auth/captcha`, async (_request, reply) => {
+      const challenge = createCaptcha(config.sessionSecret);
+      reply.setCookie(CAPTCHA_COOKIE, challenge.token, {
+        ...cookieBase,
+        httpOnly: true,
+        maxAge: 300,
+      });
+      reply.header("cache-control", "no-store");
+      reply.type("image/svg+xml; charset=utf-8");
+      return reply.send(challenge.svg);
+    });
+
     app.post(
       `${API_PREFIX}/auth/login`,
       { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } },
       async (request, reply) => {
-        const body = parseOrThrow(loginRequest, request.body);
         // 登录前没有 session，只做 header == cookie 的 double-submit 校验。
         assertCsrf(request, null);
+        const body = parseOrThrow(loginRequest, request.body);
+
+        const captchaToken = request.cookies?.[CAPTCHA_COOKIE];
+        if (!verifyCaptcha(config.sessionSecret, captchaToken, body.captcha_code)) {
+          reply.clearCookie(CAPTCHA_COOKIE, { path: "/" });
+          throw new HttpProblem(400, "captcha_invalid", "图形验证码错误或已过期");
+        }
+        reply.clearCookie(CAPTCHA_COOKIE, { path: "/" });
 
         const identifier = body.username.trim();
         const identifierLower = identifier.toLowerCase();
@@ -94,32 +116,11 @@ export function authRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginAs
           throw new HttpProblem(403, "account_unavailable", "账号当前不可登录");
         }
 
-        // 已启用 2FA：必须提供 TOTP 或一次性恢复码。
+        // 已启用 2FA：必须提供 TOTP。
         if (Number(user.twofa_enabled ?? 0) === 1) {
           const totp = body.totp_code?.replace(/\s+/g, "") ?? "";
-          const recovery = body.recovery_code?.trim().toUpperCase() ?? "";
-          let verified = false;
-
-          if (totp.length > 0 && user.twofa_secret && verifyTotp(user.twofa_secret, totp)) {
-            verified = true;
-          } else if (recovery.length > 0) {
-            const row = await db
-              .selectFrom("twofa_recovery_codes")
-              .select("id")
-              .where("user_id", "=", user.id)
-              .where("code_hash", "=", sha256(recovery))
-              .where("used_at", "is", null)
-              .executeTakeFirst();
-            if (row) {
-              await db
-                .updateTable("twofa_recovery_codes")
-                .set({ used_at: Date.now() })
-                .where("id", "=", row.id)
-                .execute();
-              verified = true;
-            }
-          }
-
+          const verified =
+            totp.length > 0 && Boolean(user.twofa_secret) && verifyTotp(user.twofa_secret ?? "", totp);
           if (!verified) throw new HttpProblem(401, "twofa_required", "需要两步验证码");
         }
 

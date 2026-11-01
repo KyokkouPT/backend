@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { API_PREFIX } from "@kyokkou/contracts";
-import { createTestContext, setCookieValues, type TestContext } from "./helpers.js";
+import { createTestContext, loginResponse, setCookieValues, type TestContext } from "./helpers.js";
 
 let ctx: TestContext;
 
@@ -80,12 +80,7 @@ describe("setup wizard", () => {
     });
     expect(again.statusCode).toBe(409);
 
-    const login = await ctx.app.inject({
-      method: "POST",
-      url: `${API_PREFIX}/auth/login`,
-      headers: { cookie, "x-csrf-token": token },
-      payload: { username: "admin", password: "owner-pass-123" },
-    });
+    const login = await loginResponse(ctx.app, "admin", "owner-pass-123");
     expect(login.statusCode).toBe(200);
   });
 });
