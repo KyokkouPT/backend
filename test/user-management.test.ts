@@ -213,7 +213,7 @@ describe("staff user management", () => {
       payload: {
         uploaded: 500 * GB,
         downloaded: 100 * GB,
-        bonus: 999,
+        bonus: 999.006,
         password: "new-pass-12345",
       },
     });
@@ -226,7 +226,7 @@ describe("staff user management", () => {
       .executeTakeFirstOrThrow();
     expect(Number(after.uploaded)).toBe(500 * GB);
     expect(Number(after.downloaded)).toBe(100 * GB);
-    expect(Number(after.bonus)).toBe(999);
+    expect(Number(after.bonus)).toBe(999.01);
     expect(Number(after.raw_uploaded)).toBe(Number(before.raw_uploaded));
     expect(Number(after.raw_downloaded)).toBe(Number(before.raw_downloaded));
 
@@ -237,7 +237,7 @@ describe("staff user management", () => {
       .where("kind", "=", "adjust")
       .executeTakeFirst();
     expect(ledger).toBeTruthy();
-    expect(Number(ledger?.delta)).toBe(999 - Number(before.bonus));
+    expect(Number(ledger?.delta)).toBeCloseTo(999.01 - Number(before.bonus), 8);
 
     const relogin = await login(ctx.app, "axue", "new-pass-12345");
     expect(relogin.username).toBe("axue");

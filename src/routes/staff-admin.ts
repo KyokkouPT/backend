@@ -339,9 +339,11 @@ export function staffAdminRoutes(deps: { db: Db }): FastifyPluginAsync {
         patch.custom_title = title;
       }
       let bonusDelta: number | null = null;
+      let normalizedBonus: number | undefined;
       if (body.bonus !== undefined) {
-        patch.bonus = body.bonus;
-        bonusDelta = body.bonus - Number(target.bonus);
+        normalizedBonus = Math.round((body.bonus + Number.EPSILON) * 100) / 100;
+        patch.bonus = normalizedBonus;
+        bonusDelta = normalizedBonus - Number(target.bonus);
       }
 
       if (Object.keys(patch).length === 0) {
@@ -358,7 +360,7 @@ export function staffAdminRoutes(deps: { db: Db }): FastifyPluginAsync {
               user_id: id,
               kind: "adjust",
               delta: bonusDelta,
-              balance_after: body.bonus,
+              balance_after: normalizedBonus ?? body.bonus,
               ref_type: "staff_adjust",
               ref_id: String(auth.user.id),
               note: `Staff 调整（${auth.user.username}）`,
