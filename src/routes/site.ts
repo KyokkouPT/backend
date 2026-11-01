@@ -98,6 +98,18 @@ function buildNav(options: { loggedIn: boolean; staffPermissions: string[] }): S
         { key: "staff-review", href: "/staff/review", label: "审核台", icon: "clipboard-check" },
         { key: "staff-reports", href: "/staff/reports", label: "举报", icon: "alert-triangle" },
         { key: "staff-users", href: "/staff/users", label: "用户管理", icon: "user-cog" },
+        ...(options.staffPermissions.includes(PERMISSIONS.staffClasses)
+          ? [
+              { key: "staff-classes", href: "/staff/classes", label: "等级管理", icon: "layers" },
+              { key: "staff-class-rules", href: "/staff/classes/rules", label: "等级规则", icon: "settings" },
+            ]
+          : []),
+        ...(options.staffPermissions.includes(PERMISSIONS.staffClassSimulate)
+          ? [{ key: "staff-class-simulate", href: "/staff/classes/simulate", label: "升降模拟", icon: "activity" }]
+          : []),
+        ...(options.staffPermissions.includes(PERMISSIONS.staffClassHistory)
+          ? [{ key: "staff-class-history", href: "/staff/classes/history", label: "等级历史", icon: "history" }]
+          : []),
         { key: "staff-anomalies", href: "/staff/anomalies", label: "反作弊", icon: "shield-alert" },
         { key: "staff-audit", href: "/staff/audit", label: "审计日志", icon: "scroll-text" },
         { key: "staff-appeals", href: "/staff/appeals", label: "申诉", icon: "clipboard-check" },

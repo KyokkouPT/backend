@@ -3,11 +3,13 @@ import {
   API_PREFIX,
   PERMISSIONS,
   classGrantBody,
+  classHistoryResponse,
   classNotificationTemplates,
   classRecalcResponse,
   classRulesSettings,
   classSimulationRequest,
   classSimulationResponse,
+  classSimulationSearchResponse,
   classRunsResponse,
   classesResponse,
   createClassBody,
@@ -23,18 +25,22 @@ import { assertCsrf, requireAuth } from "../auth/csrf.js";
 import {
   classBriefOf,
   classPermissionError,
-  evaluateRule,
   isAutoDemote,
   isAutoPromote,
   loadAllClasses,
   loadClassById,
   loadClassBySlug,
-  missingConditions,
-  nextHigherClass,
   parsePermissions,
   parseRule,
+  toClassBrief,
   type ClassRow,
 } from "../lib/classes.js";
+import {
+  buildMetrics,
+  evaluateUserClass,
+  type RecalcUser,
+  type UserClassContext,
+} from "../lib/class-decision.js";
 import { loadClassRules, runClassRecalc, saveClassRules } from "../lib/class-recalc.js";
 import { loadClassTemplates, notifyClassChange, saveClassTemplates } from "../lib/class-notifications.js";
 import { HttpProblem, badRequest, conflict, notFound } from "../lib/problem.js";
@@ -98,53 +104,68 @@ async function memberCounts(db: Db): Promise<Map<number, number>> {
   );
 }
 
-async function classMetrics(db: Db, userId: number) {
-  const row = await db
-    .selectFrom("users")
-    .selectAll()
-    .where("id", "=", userId)
-    .executeTakeFirst();
+async function loadSimulationContext(
+  db: Db,
+  userId: number,
+): Promise<{ ctx: UserClassContext; user: RecalcUser; now: number }> {
+  const row = await db.selectFrom("users").selectAll().where("id", "=", userId).executeTakeFirst();
   if (!row) throw notFound("user_not_found", "用户不存在");
+
   const now = Date.now();
-  const published = await db
-    .selectFrom("torrents")
-    .select((eb) => eb.fn.countAll<number>().as("count"))
-    .where("uploader_id", "=", userId)
-    .where("status", "=", "approved")
-    .where("deleted_at", "is", null)
-    .executeTakeFirst();
-  const invites = await db
-    .selectFrom("invites")
-    .select((eb) => eb.fn.countAll<number>().as("count"))
-    .where("inviter_id", "=", userId)
-    .where("status", "=", "used")
-    .executeTakeFirst();
-  const hnr = await db
-    .selectFrom("hnr_obligations")
-    .select((eb) => eb.fn.countAll<number>().as("count"))
-    .where("user_id", "=", userId)
-    .where("status", "!=", "reached")
-    .executeTakeFirst();
-  const ratio = Number(row.downloaded) > 0 ? Number(row.uploaded) / Number(row.downloaded) : Infinity;
-  return {
-    user: row,
-    metrics: {
-      age_days: Math.max(0, Math.floor((now - Number(row.created_at)) / 86_400_000)),
-      uploaded: Number(row.uploaded),
-      downloaded: Number(row.downloaded),
-      ratio,
-      seedtime_hours: Number(row.seedtime) / 3600,
-      bonus: Number(row.bonus),
-      torrents_published: Number(published?.count ?? 0),
-      invites_used: Number(invites?.count ?? 0),
-      warnings: Number(row.warnings ?? 0),
-      hnr_unfinished: Number(hnr?.count ?? 0),
-      last_active_days:
-        row.last_seen_at === null
-          ? 9999
-          : Math.max(0, Math.floor((now - Number(row.last_seen_at)) / 86_400_000)),
-    },
+  const [published, invites, hnr, classes, rules] = await Promise.all([
+    db
+      .selectFrom("torrents")
+      .select((eb) => eb.fn.countAll<number>().as("count"))
+      .where("uploader_id", "=", userId)
+      .where("status", "=", "approved")
+      .where("deleted_at", "is", null)
+      .executeTakeFirst(),
+    db
+      .selectFrom("invites")
+      .select((eb) => eb.fn.countAll<number>().as("count"))
+      .where("inviter_id", "=", userId)
+      .where("status", "=", "used")
+      .executeTakeFirst(),
+    db
+      .selectFrom("hnr_obligations")
+      .select((eb) => eb.fn.countAll<number>().as("count"))
+      .where("user_id", "=", userId)
+      .where("status", "!=", "reached")
+      .executeTakeFirst(),
+    loadAllClasses(db),
+    loadClassRules(db),
+  ]);
+
+  const user: RecalcUser = {
+    id: Number(row.id),
+    username: row.username,
+    class_id: row.class_id === null ? null : Number(row.class_id),
+    created_at: Number(row.created_at),
+    last_seen_at: row.last_seen_at === null ? null : Number(row.last_seen_at),
+    uploaded: Number(row.uploaded),
+    downloaded: Number(row.downloaded),
+    bonus: Number(row.bonus),
+    seedtime: Number(row.seedtime),
+    warnings: Number(row.warnings ?? 0),
+    class_locked_until: row.class_locked_until === null ? null : Number(row.class_locked_until),
+    demote_due_at: row.demote_due_at === null ? null : Number(row.demote_due_at),
   };
+
+  const metrics = buildMetrics(user, now, {
+    published: Number(published?.count ?? 0),
+    invitesUsed: Number(invites?.count ?? 0),
+    hnrUnfinished: Number(hnr?.count ?? 0),
+  });
+
+  const ctx: UserClassContext = {
+    metrics,
+    classes,
+    classById: new Map(classes.map((entry) => [Number(entry.id), entry])),
+    classBySlug: new Map(classes.map((entry) => [entry.slug, entry])),
+    rules,
+  };
+
+  return { ctx, user, now };
 }
 
 export function classRoutes(deps: { db: Db }): FastifyPluginAsync {
@@ -400,32 +421,111 @@ export function classRoutes(deps: { db: Db }): FastifyPluginAsync {
       return classNotificationTemplates.parse(body);
     });
 
-    app.post(`${API_PREFIX}/staff/classes/simulate`, async (request) => {
-      requirePerm(request, PERMISSIONS.staffClasses);
-      const body = parseOrThrow(classSimulationRequest, request.body ?? {});
-      const found = await classMetrics(db, body.user_id);
-      const classes = await loadAllClasses(db);
-      const current =
-        found.user.class_id === null ? null : (await loadClassById(db, Number(found.user.class_id)));
-      if (!current) throw badRequest("class_missing", "用户没有有效等级");
+    // 模拟器：与自动重算共用同一套判定，只读不写库（staff.class_simulate）。
+    app.get(`${API_PREFIX}/staff/classes/simulate/search`, async (request) => {
+      requirePerm(request, PERMISSIONS.staffClassSimulate);
+      const query = request.query as { q?: string };
+      const needle = query.q?.trim().toLowerCase() ?? "";
+      let builder = db
+        .selectFrom("users as u")
+        .leftJoin("classes as c", "c.id", "u.class_id")
+        .select(["u.id as id", "u.username as username", "c.slug as slug", "c.name as name", "c.rank as rank", "c.badge as badge", "c.color as color"])
+        .orderBy("u.id", "asc")
+        .limit(10);
+      if (needle.length > 0) {
+        builder = builder.where("u.username", "like", `%${needle}%` as never);
+      }
+      const rows = await builder.execute();
+      return classSimulationSearchResponse.parse({
+        items: rows.map((row) => ({
+          id: Number(row.id),
+          username: row.username,
+          class: {
+            slug: row.slug ?? "unknown",
+            name: row.name ?? "未知等级",
+            rank: Number(row.rank ?? 0),
+            badge: row.badge ?? null,
+            color: row.color ?? null,
+          },
+        })),
+      });
+    });
 
-      const target = nextHigherClass(classes, Number(current.rank));
-      const promoteRule = target ? parseRule(target.promote_rule_json) : null;
-      const canPromote =
-        target !== null &&
-        isAutoPromote(target) &&
-        promoteRule !== null &&
-        evaluateRule(promoteRule, found.metrics);
-      const action = canPromote ? "promote" : "keep";
+    app.post(`${API_PREFIX}/staff/classes/simulate`, async (request) => {
+      requirePerm(request, PERMISSIONS.staffClassSimulate);
+      const body = parseOrThrow(classSimulationRequest, request.body ?? {});
+      const { ctx, user, now } = await loadSimulationContext(db, body.user_id);
+      const decision = await evaluateUserClass(db, user, ctx, now);
+      const current = decision.current;
+      if (!current) throw badRequest("class_missing", "用户没有有效等级");
 
       return classSimulationResponse.parse({
         user_id: body.user_id,
-        current: classBriefOf(current, current.slug, current.name),
-        target: target ? { ...classBriefOf(target, target.slug, target.name) } : null,
-        action,
-        missing: target && promoteRule ? missingConditions(promoteRule, found.metrics) : [],
-        locked_until:
-          found.user.class_locked_until === null ? null : Number(found.user.class_locked_until),
+        username: user.username,
+        current: toClassBrief(current),
+        target: decision.target ? toClassBrief(decision.target) : decision.finalTarget ? toClassBrief(decision.finalTarget) : null,
+        action: decision.action,
+        path: decision.path.map((row) => toClassBrief(row)),
+        missing: decision.missing,
+        demote_reason: decision.demoteReason,
+        blocked_reason: decision.blockedReason,
+        locked_until: user.class_locked_until,
+        demote_due_at: decision.demoteDueAt,
+        metrics: {
+          ...ctx.metrics,
+          ratio: Number.isFinite(ctx.metrics.ratio) ? ctx.metrics.ratio : null,
+        },
+      });
+    });
+
+    // 等级变更历史（staff.class_history），支持按用户过滤与游标分页。
+    app.get(`${API_PREFIX}/staff/classes/history`, async (request) => {
+      requirePerm(request, PERMISSIONS.staffClassHistory);
+      const query = request.query as { user_id?: string; cursor?: string; limit?: string };
+      const limit = Math.min(Math.max(Number(query.limit ?? 30) || 30, 1), 100);
+
+      let builder = db
+        .selectFrom("user_class_history as h")
+        .leftJoin("users as u", "u.id", "h.user_id")
+        .leftJoin("classes as fc", "fc.id", "h.from_class_id")
+        .leftJoin("classes as tc", "tc.id", "h.to_class_id")
+        .leftJoin("users as actor", "actor.id", "h.actor_id")
+        .select([
+          "h.id as id",
+          "h.user_id as user_id",
+          "u.username as username",
+          "fc.name as from_class",
+          "tc.name as to_class",
+          "h.source as source",
+          "h.reason as reason",
+          "actor.username as actor",
+          "h.created_at as created_at",
+        ])
+        .orderBy("h.id", "desc")
+        .limit(limit + 1);
+
+      if (query.user_id && Number(query.user_id) > 0) {
+        builder = builder.where("h.user_id", "=", Number(query.user_id));
+      }
+      if (query.cursor && Number(query.cursor) > 0) {
+        builder = builder.where("h.id", "<", Number(query.cursor));
+      }
+
+      const rows = await builder.execute();
+      const page = rows.slice(0, limit);
+      return classHistoryResponse.parse({
+        items: page.map((row) => ({
+          id: Number(row.id),
+          user_id: Number(row.user_id),
+          username: row.username ?? null,
+          from_class: row.from_class ?? null,
+          to_class: row.to_class ?? "—",
+          source: row.source,
+          reason: row.reason,
+          actor: row.actor ?? null,
+          created_at: Number(row.created_at),
+        })),
+        next_cursor: rows.length > limit ? Number(page[page.length - 1]?.id ?? 0) : null,
       });
     });
 

@@ -1,18 +1,16 @@
 import type { Kysely, Transaction } from "kysely";
 import type { Db } from "../db/db.js";
 import type { Database } from "../db/types.js";
-import {
-  evaluateRule,
-  isAutoDemote,
-  isAutoPromote,
-  nextHigherClass,
-  parseRule,
-  pickHighestEligible,
-  ruleKey,
-  type ClassRow,
-  type UserMetrics,
-} from "./classes.js";
+import type { ClassRow, UserMetrics } from "./classes.js";
 import { notifyClassChange } from "./class-notifications.js";
+import {
+  buildMetrics,
+  decideDemotion,
+  decidePromotion,
+  isLocked,
+  type RecalcUser,
+  type UserClassContext,
+} from "./class-decision.js";
 
 type DbLike = Kysely<Database> | Transaction<Database>;
 
@@ -254,70 +252,26 @@ export async function runClassRecalc(db: Db, options: RecalcOptions): Promise<Re
 
   try {
     for (const user of users) {
-      const lockedUntil = user.class_locked_until === null ? null : Number(user.class_locked_until);
-      if (lockedUntil !== null && lockedUntil > now) continue;
+      if (isLocked(user, now)) continue;
 
       const current =
         user.class_id === null ? null : (classById.get(Number(user.class_id)) ?? null);
       if (!current) continue;
       scanned += 1;
 
-      const ratio =
-        Number(user.downloaded) > 0
-          ? Number(user.uploaded) / Number(user.downloaded)
-          : Infinity;
-      const metrics: UserMetrics = {
-        age_days: Math.max(0, Math.floor((now - Number(user.created_at)) / 86_400_000)),
-        uploaded: Number(user.uploaded),
-        downloaded: Number(user.downloaded),
-        ratio,
-        seedtime_hours: Number(user.seedtime) / 3600,
-        bonus: Number(user.bonus),
-        torrents_published: publishedByUser.get(Number(user.id)) ?? 0,
-        invites_used: invitesByUser.get(Number(user.id)) ?? 0,
-        warnings: Number(user.warnings ?? 0),
-        hnr_unfinished: hnrByUser.get(Number(user.id)) ?? 0,
-        last_active_days:
-          user.last_seen_at === null
-            ? 9999
-            : Math.max(0, Math.floor((now - Number(user.last_seen_at)) / 86_400_000)),
-      };
+      const metrics: UserMetrics = buildMetrics(user, now, {
+        published: publishedByUser.get(Number(user.id)) ?? 0,
+        invitesUsed: invitesByUser.get(Number(user.id)) ?? 0,
+        hnrUnfinished: hnrByUser.get(Number(user.id)) ?? 0,
+      });
+      const ctx: UserClassContext = { metrics, classes, classById, classBySlug, rules };
 
       const historyUser = { id: Number(user.id), class_id: user.class_id, username: user.username };
 
       // ---- 降级判定（仅当前等级允许自动降级） ----
-      let demoteTarget: ClassRow | null = null;
-      let demoteReason = "";
-      if (isAutoDemote(current)) {
-        const violation =
-          rules.matrix_enabled && Number(current.exempt_ratio_matrix) === 0
-            ? rules.ratio_matrix.find(
-                (row) => Number(user.downloaded) >= row.download_gb * GB && ratio < row.min_ratio,
-              )
-            : undefined;
-
-        if (violation) {
-          demoteTarget = classBySlug.get("leechwarn") ?? null;
-          demoteReason = `下载量超过 ${String(violation.download_gb)}GB 时分享率低于 ${String(violation.min_ratio)}`;
-        } else {
-          const demoteRule = parseRule(current.demote_rule_json);
-          if (demoteRule) {
-            if (evaluateRule(demoteRule, metrics)) {
-              const configured = current.demote_target_slug
-                ? (classBySlug.get(current.demote_target_slug) ?? null)
-                : null;
-              demoteTarget = configured ?? pickHighestEligible(classes, metrics);
-              demoteReason = "不再满足当前等级条件";
-            }
-          } else {
-            const promoteRule = parseRule(current.promote_rule_json);
-            if (promoteRule && !evaluateRule(promoteRule, metrics)) {
-              demoteTarget = pickHighestEligible(classes, metrics);
-              demoteReason = "不再满足当前等级条件";
-            }
-          }
-        }
-      }
+      const demotion = decideDemotion(ctx, current, user as RecalcUser, metrics);
+      const demoteTarget: ClassRow | null = demotion.target;
+      const demoteReason = demotion.reason ?? "";
 
       if (demoteTarget && Number(demoteTarget.rank) < Number(current.rank)) {
         const graceDays = Number(current.demote_grace_days);
@@ -370,55 +324,50 @@ export async function runClassRecalc(db: Db, options: RecalcOptions): Promise<Re
       }
 
       // ---- 升级判定：逐级升，可一次连升多级 ----
-      let cursor = current;
-      for (let guard = 0; guard < classes.length; guard += 1) {
-        const next = nextHigherClass(classes, Number(cursor.rank));
-        if (!next) break;
-        if (!isAutoPromote(next)) {
-          cursor = next;
-          continue;
+      const promotion = await decidePromotion(db, ctx, current, Number(user.id), metrics, now);
+
+      if (promotion.blocked) {
+        // 观察期：首次达标写入进度，未满期时只更新时间。
+        const targetId = Number(promotion.blocked.to.id);
+        const progress = await db
+          .selectFrom("user_class_progress")
+          .selectAll()
+          .where("user_id", "=", user.id)
+          .where("target_class_id", "=", targetId)
+          .executeTakeFirst();
+        if (!progress) {
+          await db
+            .insertInto("user_class_progress")
+            .values({
+              user_id: Number(user.id),
+              target_class_id: targetId,
+              first_met_at: now,
+              last_checked_at: now,
+            })
+            .execute();
+        } else {
+          await db
+            .updateTable("user_class_progress")
+            .set({ last_checked_at: now })
+            .where("id", "=", progress.id)
+            .execute();
         }
-        const promoteRule = parseRule(next.promote_rule_json);
-        if (!promoteRule || !evaluateRule(promoteRule, metrics)) break;
+      }
 
-        // 条件完全相同的等级只自动获得较低的那个，避免一次检查穿过同条件等级。
-        if (ruleKey(promoteRule) === ruleKey(parseRule(cursor.promote_rule_json))) break;
-
-        const graceDays = Number(next.promote_grace_days);
-        if (graceDays > 0) {
-          const progress = await db
-            .selectFrom("user_class_progress")
-            .selectAll()
+      for (const step of promotion.steps) {
+        const next = step.to;
+        if (step.graceDays > 0) {
+          await db
+            .deleteFrom("user_class_progress")
             .where("user_id", "=", user.id)
             .where("target_class_id", "=", Number(next.id))
-            .executeTakeFirst();
-          if (!progress) {
-            await db
-              .insertInto("user_class_progress")
-              .values({
-                user_id: Number(user.id),
-                target_class_id: Number(next.id),
-                first_met_at: now,
-                last_checked_at: now,
-              })
-              .execute();
-            break;
-          }
-          if (now - Number(progress.first_met_at) < graceDays * 86_400_000) {
-            await db
-              .updateTable("user_class_progress")
-              .set({ last_checked_at: now })
-              .where("id", "=", progress.id)
-              .execute();
-            break;
-          }
-          await db.deleteFrom("user_class_progress").where("id", "=", progress.id).execute();
+            .execute();
         }
 
         await db.transaction().execute(async (trx) => {
           await applyClassChange(trx, {
             user: historyUser,
-            fromClass: cursor,
+            fromClass: step.from,
             toClass: next,
             source: "auto",
             reason: "满足升级条件",
@@ -430,12 +379,11 @@ export async function runClassRecalc(db: Db, options: RecalcOptions): Promise<Re
         await notifyClassChange(db, {
           userId: Number(user.id),
           kind: "promote",
-          oldName: cursor.name,
+          oldName: step.from.name,
           newName: next.name,
           reason: "满足升级条件",
         });
         promoted += 1;
-        cursor = next;
       }
     }
   } catch (error) {

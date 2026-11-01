@@ -62,6 +62,8 @@ export const PERMISSIONS = {
   staffUserStatus: "staff.user_status",
   staffInviteView: "staff.invite_view",
   staffIpView: "staff.ip_view",
+  staffClassSimulate: "staff.class_simulate",
+  staffClassHistory: "staff.class_history",
   classAutoPromote: "class.auto_promote",
   classAutoDemote: "class.auto_demote",
 } as const;
@@ -1058,15 +1060,67 @@ export const classNotificationTemplates = z.object({
 export type ClassNotificationTemplates = z.infer<typeof classNotificationTemplates>;
 
 export const classSimulationRequest = z.object({ user_id: z.number().int() });
+
+export const classMetricsSnapshot = z.object({
+  age_days: z.number(),
+  uploaded: z.number(),
+  downloaded: z.number(),
+  ratio: z.number().nullable(),
+  seedtime_hours: z.number(),
+  bonus: z.number(),
+  torrents_published: z.number().int(),
+  invites_used: z.number().int(),
+  warnings: z.number().int(),
+  hnr_unfinished: z.number().int(),
+  last_active_days: z.number(),
+});
+export type ClassMetricsSnapshot = z.infer<typeof classMetricsSnapshot>;
+
 export const classSimulationResponse = z.object({
   user_id: z.number().int(),
+  username: z.string(),
   current: classBrief,
   target: classBrief.nullable(),
   action: z.enum(["promote", "demote", "keep"]),
+  path: z.array(classBrief),
   missing: z.array(z.string()),
+  demote_reason: z.string().nullable(),
+  blocked_reason: z.string().nullable(),
   locked_until: z.number().nullable(),
+  demote_due_at: z.number().nullable(),
+  metrics: classMetricsSnapshot,
 });
 export type ClassSimulationResponse = z.infer<typeof classSimulationResponse>;
+
+export const classSimulationSearchResponse = z.object({
+  items: z.array(
+    z.object({
+      id: z.number().int(),
+      username: z.string(),
+      class: classBrief,
+    }),
+  ),
+});
+export type ClassSimulationSearchResponse = z.infer<typeof classSimulationSearchResponse>;
+
+export const classHistoryItem = z.object({
+  id: z.number().int(),
+  user_id: z.number().int(),
+  username: z.string().nullable(),
+  from_class: z.string().nullable(),
+  to_class: z.string(),
+  source: z.string(),
+  reason: z.string(),
+  actor: z.string().nullable(),
+  created_at: z.number(),
+});
+export type ClassHistoryItem = z.infer<typeof classHistoryItem>;
+
+export const classHistoryResponse = z.object({
+  items: z.array(classHistoryItem),
+  next_cursor: z.number().int().nullable(),
+});
+export type ClassHistoryResponse = z.infer<typeof classHistoryResponse>;
 
 export const classRecalcResponse = z.object({
   ok: z.boolean(),

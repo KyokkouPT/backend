@@ -331,4 +331,48 @@ describe("class system", () => {
       .where("id", "=", target)
       .execute();
   });
+
+  it("simulates class decisions with granular permissions", async () => {
+    const target = await userId("阿雪");
+
+    const simulation = await ctx.app.inject({
+      method: "POST",
+      url: `${API_PREFIX}/staff/classes/simulate`,
+      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
+      payload: { user_id: target },
+    });
+    expect(simulation.statusCode).toBe(200);
+    const body = simulation.json() as {
+      action: string;
+      current: { slug: string };
+      metrics: { age_days: number };
+      blocked_reason: string | null;
+    };
+    expect(["promote", "demote", "keep"]).toContain(body.action);
+    expect(body.current.slug).toBe("user");
+    expect(body.metrics.age_days).toBeGreaterThanOrEqual(0);
+
+    const forbiddenSimulation = await ctx.app.inject({
+      method: "POST",
+      url: `${API_PREFIX}/staff/classes/simulate`,
+      headers: { cookie: member.cookieHeader, "x-csrf-token": member.csrfToken },
+      payload: { user_id: target },
+    });
+    expect(forbiddenSimulation.statusCode).toBe(403);
+
+    const history = await ctx.app.inject({
+      method: "GET",
+      url: `${API_PREFIX}/staff/classes/history?user_id=${String(target)}`,
+      headers: { cookie: admin.cookieHeader },
+    });
+    expect(history.statusCode).toBe(200);
+    expect((history.json() as { items: unknown[] }).items.length).toBeGreaterThanOrEqual(1);
+
+    const forbiddenHistory = await ctx.app.inject({
+      method: "GET",
+      url: `${API_PREFIX}/staff/classes/history`,
+      headers: { cookie: member.cookieHeader },
+    });
+    expect(forbiddenHistory.statusCode).toBe(403);
+  });
 });

@@ -70,6 +70,8 @@ export const STAFF_PERMISSIONS = [
   "staff.user_status",
   "staff.invite_view",
   "staff.ip_view",
+  "staff.class_simulate",
+  "staff.class_history",
 ] as const;
 
 export const USER_EXTRA_PERMISSIONS = [
