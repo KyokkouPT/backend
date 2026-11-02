@@ -6,6 +6,7 @@ import {
   classHistoryResponse,
   classNotificationTemplates,
   classRecalcResponse,
+  classRecoveryBandsResponse,
   classRulesSettings,
   classSchedulerResponse,
   classSimulationRequest,
@@ -15,6 +16,7 @@ import {
   classesResponse,
   createClassBody,
   updateClassBody,
+  updateClassRecoveryBandsBody,
   updateClassSchedulerBody,
   userPermissionOverridesBody,
   userPermissionOverridesResponse,
@@ -166,6 +168,7 @@ async function loadSimulationContext(
     raw_uploaded: Number(row.raw_uploaded ?? 0),
     raw_downloaded: Number(row.raw_downloaded ?? 0),
     bonus: Number(row.bonus),
+    seed_points: Number(row.seed_points),
     seedtime: Number(row.seedtime),
     warnings: Number(row.warnings ?? 0),
     class_locked_until: row.class_locked_until === null ? null : Number(row.class_locked_until),
@@ -220,65 +223,10 @@ export function classRoutes(deps: { db: Db }): FastifyPluginAsync {
       return classesResponse.parse({ items: rows.map((row) => classItem(row)) });
     });
 
-    app.post(`${API_PREFIX}/staff/classes`, async (request, reply) => {
+    app.post(`${API_PREFIX}/staff/classes`, async (request) => {
       const auth = requirePerm(request, PERMISSIONS.staffClasses);
       assertCsrf(request, auth.session);
-      const body = parseOrThrow(createClassBody, request.body ?? {});
-      const rows = await loadAllClasses(db);
-      if (rows.some((row) => row.slug === body.slug)) {
-        throw conflict("class_exists", "等级标识已存在");
-      }
-
-      const rank = body.rank ?? Math.max(0, ...rows.map((row) => Number(row.rank))) + 1;
-      ensureBelowOperator(request, rank);
-
-      const permissions = [...new Set(body.permissions)];
-      const permissionError = classPermissionError(permissions);
-      if (permissionError) throw badRequest("invalid_permissions", permissionError);
-
-      const now = Date.now();
-      await db
-        .insertInto("classes")
-        .values({
-          slug: body.slug,
-          name: body.name,
-          rank,
-          badge: body.badge ?? null,
-          color: body.color ?? null,
-          description: body.description,
-          permissions_json: JSON.stringify(permissions),
-          invite_quota: body.invite_quota,
-          auto_approve_quota: body.auto_approve_quota,
-          promote_rule_json: body.promote_rule ? JSON.stringify(body.promote_rule) : null,
-          demote_rule_json: body.demote_rule ? JSON.stringify(body.demote_rule) : null,
-          promote_grace_days: body.promote_grace_days,
-          demote_grace_days: body.demote_grace_days,
-          lock_manual: body.lock_manual ? 1 : 0,
-          manual_grantable: body.manual_grantable ? 1 : 0,
-          visible: body.visible ? 1 : 0,
-          exempt_hr: body.exempt_hr ? 1 : 0,
-          exempt_ratio_matrix: body.exempt_ratio_matrix ? 1 : 0,
-          created_at: now,
-          updated_at: now,
-        })
-        .execute();
-
-      await db
-        .insertInto("audit_logs")
-        .values({
-          actor_id: Number(auth.user.id),
-          action: "class.create",
-          target_type: "class",
-          target_id: body.slug,
-          detail_json: JSON.stringify({ rank, permissions }),
-          ip: request.ip,
-          created_at: now,
-        })
-        .execute();
-
-      return reply.status(201).send(
-        staffActionResponse.parse({ ok: true, status: "created", message: `已创建等级「${body.name}」` }),
-      );
+      throw badRequest("classes_fixed", "固定用户组不能新增，只能编辑现有 17 个组");
     });
 
     app.put(`${API_PREFIX}/staff/classes/:slug`, async (request) => {
@@ -290,6 +238,9 @@ export function classRoutes(deps: { db: Db }): FastifyPluginAsync {
       ensureBelowOperator(request, Number(existing.rank));
 
       const body = parseOrThrow(updateClassBody, request.body ?? {});
+      if (body.rank !== undefined) {
+        throw badRequest("class_rank_fixed", "固定用户组的 rank 不能修改");
+      }
       const now = Date.now();
       const permissions = body.permissions ? [...new Set(body.permissions)] : undefined;
       if (permissions) {
@@ -348,45 +299,7 @@ export function classRoutes(deps: { db: Db }): FastifyPluginAsync {
     app.delete(`${API_PREFIX}/staff/classes/:slug`, async (request) => {
       const auth = requirePerm(request, PERMISSIONS.staffClasses);
       assertCsrf(request, auth.session);
-      const slug = (request.params as { slug: string }).slug;
-      const existing = await loadClassBySlug(db, slug);
-      if (!existing) throw notFound("class_not_found", "等级不存在");
-      ensureBelowOperator(request, Number(existing.rank));
-      if (slug === "user") throw badRequest("fallback_class", "默认等级不能删除");
-
-      const used = await db
-        .selectFrom("users")
-        .select((eb) => eb.fn.countAll<number>().as("count"))
-        .where("class_id", "=", Number(existing.id))
-        .executeTakeFirst();
-      if (Number(used?.count ?? 0) > 0) {
-        throw conflict("class_in_use", "仍有用户属于该等级，不能删除");
-      }
-
-      if (parsePermissions(existing.permissions_json).includes(PERMISSIONS.staffAvailable)) {
-        const rows = await loadAllClasses(db);
-        const staffClasses = rows.filter((row) =>
-          parsePermissions(row.permissions_json).includes(PERMISSIONS.staffAvailable),
-        );
-        if (staffClasses.length <= 1) {
-          throw conflict("last_staff_class", "不能删除最后一个管理等级");
-        }
-      }
-
-      await db.deleteFrom("classes").where("id", "=", existing.id).execute();
-      await db
-        .insertInto("audit_logs")
-        .values({
-          actor_id: Number(auth.user.id),
-          action: "class.delete",
-          target_type: "class",
-          target_id: slug,
-          detail_json: null,
-          ip: request.ip,
-          created_at: Date.now(),
-        })
-        .execute();
-      return staffActionResponse.parse({ ok: true, status: "deleted", message: `已删除等级 ${slug}` });
+      throw badRequest("classes_fixed", "固定用户组不能删除");
     });
 
     app.get(`${API_PREFIX}/staff/classes/rules`, async (request) => {
@@ -561,6 +474,71 @@ export function classRoutes(deps: { db: Db }): FastifyPluginAsync {
           created_at: Number(row.created_at),
         })),
         next_cursor: rows.length > limit ? Number(page[page.length - 1]?.id ?? 0) : null,
+      });
+    });
+
+    app.get(`${API_PREFIX}/staff/classes/recovery-bands`, async (request) => {
+      requirePerm(request, PERMISSIONS.staffClasses);
+      const rows = await db
+        .selectFrom("class_recovery_bands")
+        .selectAll()
+        .orderBy("display_order", "asc")
+        .orderBy("id", "asc")
+        .execute();
+      return classRecoveryBandsResponse.parse({
+        items: rows.map((row) => ({
+          id: Number(row.id),
+          min_download_bytes: Number(row.min_download_bytes),
+          max_download_bytes:
+            row.max_download_bytes === null ? null : Number(row.max_download_bytes),
+          min_ratio: Number(row.min_ratio),
+          display_order: Number(row.display_order),
+        })),
+      });
+    });
+
+    app.put(`${API_PREFIX}/staff/classes/recovery-bands`, async (request) => {
+      const auth = requirePerm(request, PERMISSIONS.staffClasses);
+      assertCsrf(request, auth.session);
+      const body = parseOrThrow(updateClassRecoveryBandsBody, request.body ?? {});
+      for (const band of body.items) {
+        if (band.max_download_bytes !== null && band.max_download_bytes <= band.min_download_bytes) {
+          throw badRequest("invalid_recovery_band", "恢复分段的下载量上限必须大于下限");
+        }
+      }
+      const now = Date.now();
+      await db.transaction().execute(async (trx) => {
+        await trx.deleteFrom("class_recovery_bands").execute();
+        if (body.items.length > 0) {
+          await trx
+            .insertInto("class_recovery_bands")
+            .values(
+              body.items.map((band) => ({
+                min_download_bytes: band.min_download_bytes,
+                max_download_bytes: band.max_download_bytes,
+                min_ratio: band.min_ratio,
+                display_order: band.display_order,
+                created_at: now,
+                updated_at: now,
+              })),
+            )
+            .execute();
+        }
+      });
+      await db
+        .insertInto("audit_logs")
+        .values({
+          actor_id: Number(auth.user.id),
+          action: "classes.recovery_bands.update",
+          target_type: "settings",
+          target_id: "class_recovery_bands",
+          detail_json: JSON.stringify({ count: body.items.length }),
+          ip: request.ip,
+          created_at: now,
+        })
+        .execute();
+      return classRecoveryBandsResponse.parse({
+        items: body.items.map((band, index) => ({ ...band, id: index + 1 })),
       });
     });
 

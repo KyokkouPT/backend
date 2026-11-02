@@ -22,6 +22,7 @@ export type UserMetrics = {
   ratio: number;
   seedtime_hours: number;
   bonus: number;
+  seed_points: number;
   torrents_published: number;
   invites_used: number;
   warnings: number;
@@ -36,6 +37,7 @@ export const METRIC_LABELS: Record<string, string> = {
   ratio: "分享率",
   seedtime_hours: "做种时长（小时）",
   bonus: "魔力值",
+  seed_points: "做种积分",
   torrents_published: "发布数",
   invites_used: "已用邀请",
   warnings: "警告次数",

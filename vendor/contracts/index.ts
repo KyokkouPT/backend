@@ -1589,6 +1589,23 @@ export const updateClassSchedulerBody = z.object({
 });
 export type UpdateClassSchedulerBody = z.infer<typeof updateClassSchedulerBody>;
 
+export const classRecoveryBand = z.object({
+  id: z.number().int().optional(),
+  min_download_bytes: z.number().min(0),
+  max_download_bytes: z.number().min(0).nullable(),
+  min_ratio: z.number().min(0).max(10),
+  display_order: z.number().int().min(0),
+});
+export type ClassRecoveryBand = z.infer<typeof classRecoveryBand>;
+
+export const classRecoveryBandsResponse = z.object({ items: z.array(classRecoveryBand) });
+export type ClassRecoveryBandsResponse = z.infer<typeof classRecoveryBandsResponse>;
+
+export const updateClassRecoveryBandsBody = z.object({
+  items: z.array(classRecoveryBand.omit({ id: true })).max(30),
+});
+export type UpdateClassRecoveryBandsBody = z.infer<typeof updateClassRecoveryBandsBody>;
+
 export const classNotificationTemplates = z.object({
   promote: z.string().max(500),
   demote: z.string().max(500),
@@ -1607,6 +1624,7 @@ export const classMetricsSnapshot = z.object({
   ratio: z.number().nullable(),
   seedtime_hours: z.number(),
   bonus: z.number(),
+  seed_points: z.number(),
   torrents_published: z.number().int(),
   invites_used: z.number().int(),
   warnings: z.number().int(),

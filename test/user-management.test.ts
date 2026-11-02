@@ -167,13 +167,13 @@ describe("staff user management", () => {
     const honor = await ctx.db
       .selectFrom("classes")
       .select("id")
-      .where("slug", "=", "honor")
+      .where("slug", "=", "vip")
       .executeTakeFirstOrThrow();
     await ctx.db
       .updateTable("users")
       .set({
         class_id: Number(honor.id),
-        class_key: "honor",
+        class_key: "vip",
         demote_due_at: Date.now() + 86_400_000,
       })
       .where("id", "=", id)

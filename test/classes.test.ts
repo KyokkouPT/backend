@@ -56,38 +56,65 @@ describe("class system", () => {
     expect(memberBody.permissions.some((p) => p.startsWith("staff."))).toBe(false);
   });
 
-  it("creates classes and rejects invalid staff permission sets", async () => {
+  it("keeps 17 fixed classes and rejects create/delete/rank changes", async () => {
+    const list = await ctx.app.inject({
+      method: "GET",
+      url: `${API_PREFIX}/staff/classes`,
+      headers: { cookie: admin.cookieHeader },
+    });
+    expect(list.statusCode).toBe(200);
+    const items = (list.json() as { items: { slug: string; rank: number; name: string }[] }).items;
+    expect(items).toHaveLength(17);
+    expect(items.map((item) => item.slug)).toEqual([
+      "leechwarn",
+      "user",
+      "member",
+      "advanced",
+      "elite",
+      "master",
+      "legend",
+      "glory",
+      "supreme",
+      "hall",
+      "vip",
+      "retiree",
+      "uploader",
+      "staff",
+      "administrator",
+      "sysop",
+      "owner",
+    ]);
+
     const created = await ctx.app.inject({
       method: "POST",
       url: `${API_PREFIX}/staff/classes`,
       headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
-      payload: { slug: "test-tier", name: "测试等级", rank: 35, permissions: ["rss.read"] },
+      payload: { slug: "test-tier", name: "测试等级", rank: 35, permissions: [] },
     });
-    expect(created.statusCode).toBe(201);
+    expect(created.statusCode).toBe(400);
 
-    const duplicate = await ctx.app.inject({
-      method: "POST",
-      url: `${API_PREFIX}/staff/classes`,
+    const removed = await ctx.app.inject({
+      method: "DELETE",
+      url: `${API_PREFIX}/staff/classes/vip`,
       headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
-      payload: { slug: "test-tier", name: "重复", rank: 36, permissions: [] },
     });
-    expect(duplicate.statusCode).toBe(409);
+    expect(removed.statusCode).toBe(400);
+
+    const rankChange = await ctx.app.inject({
+      method: "PUT",
+      url: `${API_PREFIX}/staff/classes/vip`,
+      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
+      payload: { rank: 105 },
+    });
+    expect(rankChange.statusCode).toBe(400);
 
     const invalid = await ctx.app.inject({
-      method: "POST",
-      url: `${API_PREFIX}/staff/classes`,
+      method: "PUT",
+      url: `${API_PREFIX}/staff/classes/vip`,
       headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
-      payload: { slug: "bad-staff", name: "坏管理", rank: 37, permissions: ["staff.users"] },
+      payload: { permissions: ["staff.users"] },
     });
     expect(invalid.statusCode).toBe(400);
-
-    const tooHigh = await ctx.app.inject({
-      method: "POST",
-      url: `${API_PREFIX}/staff/classes`,
-      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
-      payload: { slug: "too-high", name: "过高", rank: 95, permissions: [] },
-    });
-    expect(tooHigh.statusCode).toBe(403);
   });
 
   it("allows manual changes to auto classes", async () => {
@@ -311,8 +338,7 @@ describe("class system", () => {
       .select("c.slug")
       .where("u.id", "=", target)
       .executeTakeFirstOrThrow();
-    expect(row.slug).toBe("user");
-
+    expect(row.slug).toBe("advanced");
     await ctx.db
       .updateTable("classes")
       .set({
@@ -341,6 +367,7 @@ describe("class system", () => {
         max_class_once: Number(userClass.id),
         uploaded: 200 * 1024 ** 3,
         downloaded: 60 * 1024 ** 3,
+        seed_points: 50000,
         created_at: Date.now() - 60 * 86_400_000,
       })
       .where("id", "=", target)
@@ -484,87 +511,49 @@ describe("class system", () => {
     expect(recovered.slug).toBe("user");
   });
 
-  it("uses the configured global matrix target and rejects unknown targets", async () => {
-    const rulesResponse = await ctx.app.inject({
+  it("reads and updates configurable recovery bands", async () => {
+    const initial = await ctx.app.inject({
       method: "GET",
-      url: `${API_PREFIX}/staff/classes/rules`,
+      url: `${API_PREFIX}/staff/classes/recovery-bands`,
       headers: { cookie: admin.cookieHeader },
     });
-    expect(rulesResponse.statusCode).toBe(200);
-    const rules = rulesResponse.json() as {
-      matrix_enabled: boolean;
-      ratio_matrix: { download_gb: number; min_ratio: number }[];
-      matrix_target_slug: string;
-    };
-    expect(rules.matrix_target_slug).toBe("leechwarn");
+    expect(initial.statusCode).toBe(200);
+    const bands = (initial.json() as {
+      items: {
+        min_download_bytes: number;
+        max_download_bytes: number | null;
+        min_ratio: number;
+        display_order: number;
+      }[];
+    }).items;
+    expect(bands).toHaveLength(5);
 
-    const target = await userId("root");
-    const advanced = await ctx.db
-      .selectFrom("classes")
-      .select("id")
-      .where("slug", "=", "advanced")
-      .executeTakeFirstOrThrow();
-    await ctx.db
-      .updateTable("classes")
-      .set({ demote_grace_days: 0 })
-      .where("id", "=", advanced.id)
-      .execute();
-    await ctx.db
-      .updateTable("users")
-      .set({
-        class_id: Number(advanced.id),
-        class_key: "advanced",
-        created_at: Date.now(),
-        uploaded: 0,
-        downloaded: 50 * 1024 ** 3,
-        demote_due_at: null,
-      })
-      .where("id", "=", target)
-      .execute();
-
-    const saved = await ctx.app.inject({
+    const updated = await ctx.app.inject({
       method: "PUT",
-      url: `${API_PREFIX}/staff/classes/rules`,
+      url: `${API_PREFIX}/staff/classes/recovery-bands`,
       headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
-      payload: { ...rules, matrix_target_slug: "member" },
+      payload: {
+        items: bands.map((band, index) => ({ ...band, display_order: (index + 1) * 10 })),
+      },
     });
-    expect(saved.statusCode).toBe(200);
-    expect((saved.json() as { matrix_target_slug: string }).matrix_target_slug).toBe("member");
-
-    const recalc = await ctx.app.inject({
-      method: "POST",
-      url: `${API_PREFIX}/staff/classes/recalc`,
-      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
-      payload: {},
-    });
-    expect(recalc.statusCode).toBe(200);
-    const row = await ctx.db
-      .selectFrom("users as u")
-      .innerJoin("classes as c", "c.id", "u.class_id")
-      .select("c.slug")
-      .where("u.id", "=", target)
-      .executeTakeFirstOrThrow();
-    expect(row.slug).toBe("member");
+    expect(updated.statusCode).toBe(200);
 
     const invalid = await ctx.app.inject({
       method: "PUT",
-      url: `${API_PREFIX}/staff/classes/rules`,
+      url: `${API_PREFIX}/staff/classes/recovery-bands`,
       headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
-      payload: { ...rules, matrix_target_slug: "missing-class" },
+      payload: {
+        items: [
+          {
+            min_download_bytes: 100,
+            max_download_bytes: 50,
+            min_ratio: 0.4,
+            display_order: 0,
+          },
+        ],
+      },
     });
     expect(invalid.statusCode).toBe(400);
-
-    await ctx.app.inject({
-      method: "PUT",
-      url: `${API_PREFIX}/staff/classes/rules`,
-      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
-      payload: rules,
-    });
-    await ctx.db
-      .updateTable("classes")
-      .set({ demote_grace_days: 7 })
-      .where("id", "=", advanced.id)
-      .execute();
   });
 
   it("validates cron expressions and their minimum interval", () => {
@@ -609,6 +598,7 @@ describe("class system", () => {
         class_key: "user",
         uploaded: 200 * 1024 ** 3,
         downloaded: 60 * 1024 ** 3,
+        seed_points: 50000,
         created_at: Date.now() - 60 * 86_400_000,
         demote_due_at: null,
         class_locked_until: null,
@@ -644,19 +634,26 @@ describe("class system", () => {
 
   it("enforces user capability nodes", async () => {
     const target = await userId("axue");
-    const created = await ctx.app.inject({
-      method: "POST",
-      url: `${API_PREFIX}/staff/classes`,
+    const retiree = await ctx.db
+      .selectFrom("classes")
+      .select(["id", "permissions_json"])
+      .where("slug", "=", "retiree")
+      .executeTakeFirstOrThrow();
+    const originalPermissions = retiree.permissions_json;
+
+    const updated = await ctx.app.inject({
+      method: "PUT",
+      url: `${API_PREFIX}/staff/classes/retiree`,
       headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
-      payload: { slug: "no-rights", name: "无权限测试", rank: 5, permissions: [] },
+      payload: { permissions: [] },
     });
-    expect(created.statusCode).toBe(201);
+    expect(updated.statusCode).toBe(200);
 
     const assigned = await ctx.app.inject({
       method: "PUT",
       url: `${API_PREFIX}/staff/users/${String(target)}/class`,
       headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
-      payload: { class_slug: "no-rights" },
+      payload: { class_slug: "retiree" },
     });
     expect(assigned.statusCode).toBe(200);
 
@@ -675,6 +672,12 @@ describe("class system", () => {
     });
     expect(invite.statusCode).toBe(403);
 
+    await ctx.app.inject({
+      method: "PUT",
+      url: `${API_PREFIX}/staff/classes/retiree`,
+      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
+      payload: { permissions: JSON.parse(originalPermissions) as string[] },
+    });
     const userClass = await ctx.db
       .selectFrom("classes")
       .select("id")

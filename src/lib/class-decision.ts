@@ -39,6 +39,7 @@ export type UserClassContext = {
   classById: Map<number, ClassRow>;
   classBySlug: Map<string, ClassRow>;
   rules: ClassRules;
+  recoveryBands?: { min_download_bytes: number; max_download_bytes: number | null; min_ratio: number }[];
   /** 预加载的 user_class_progress：`userId:targetClassId` -> first_met_at。 */
   progress?: Map<string, number>;
 };
@@ -54,6 +55,7 @@ export type RecalcUser = {
   raw_uploaded: number;
   raw_downloaded: number;
   bonus: number;
+  seed_points: number;
   seedtime: number;
   warnings: number | null;
   class_locked_until: number | null;
@@ -79,6 +81,7 @@ export function buildMetrics(
     ratio: ratioOf(Number(user.uploaded), Number(user.downloaded)),
     seedtime_hours: Number(user.seedtime) / 3600,
     bonus: Number(user.bonus),
+    seed_points: Number(user.seed_points),
     torrents_published: extra.published,
     invites_used: extra.invitesUsed,
     warnings: Number(user.warnings ?? 0),
@@ -129,8 +132,11 @@ export function decideDemotion(
     const configured = current.demote_target_slug
       ? (ctx.classBySlug.get(current.demote_target_slug) ?? null)
       : null;
+    const lower = ctx.classes
+      .filter((row) => Number(row.rank) < Number(current.rank))
+      .sort((a, b) => Number(b.rank) - Number(a.rank))[0] ?? null;
     return {
-      target: configured ?? pickHighestEligible(ctx.classes, metrics),
+      target: configured ?? lower,
       reason: "不再满足当前等级条件",
     };
   }
@@ -170,6 +176,19 @@ export async function decidePromotion(
     const next = nextHigherClass(ctx.classes, Number(cursor.rank));
     if (!next) break;
     if (!isAutoPromote(next)) {
+      cursor = next;
+      continue;
+    }
+
+    if (current.slug === "leechwarn" && next.slug === "user") {
+      const band = (ctx.recoveryBands ?? []).find(
+        (item) =>
+          metrics.downloaded >= Number(item.min_download_bytes) &&
+          (item.max_download_bytes === null ||
+            metrics.downloaded < Number(item.max_download_bytes)),
+      );
+      if (!band || metrics.ratio < Number(band.min_ratio)) break;
+      steps.push({ from: cursor, to: next, graceDays: 0, graceSatisfied: true });
       cursor = next;
       continue;
     }

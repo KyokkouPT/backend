@@ -215,6 +215,12 @@ export async function runClassRecalc(db: Db, options: RecalcOptions): Promise<Re
   const classById = new Map(classes.map((row) => [Number(row.id), row]));
   const classBySlug = new Map(classes.map((row) => [row.slug, row]));
 
+  const recoveryBands = await db
+    .selectFrom("class_recovery_bands")
+    .select(["min_download_bytes", "max_download_bytes", "min_ratio"])
+    .orderBy("display_order", "asc")
+    .execute();
+
   const users = await db
     .selectFrom("users")
     .select([
@@ -228,6 +234,7 @@ export async function runClassRecalc(db: Db, options: RecalcOptions): Promise<Re
       "raw_uploaded",
       "raw_downloaded",
       "bonus",
+      "seed_points",
       "seedtime",
       "warnings",
       "class_locked_until",
@@ -294,7 +301,20 @@ export async function runClassRecalc(db: Db, options: RecalcOptions): Promise<Re
         invitesUsed: invitesByUser.get(Number(user.id)) ?? 0,
         hnrUnfinished: hnrByUser.get(Number(user.id)) ?? 0,
       });
-      const ctx: UserClassContext = { metrics, classes, classById, classBySlug, rules, progress: progressByUser };
+      const ctx: UserClassContext = {
+        metrics,
+        classes,
+        classById,
+        classBySlug,
+        rules,
+        recoveryBands: recoveryBands.map((row) => ({
+          min_download_bytes: Number(row.min_download_bytes),
+          max_download_bytes:
+            row.max_download_bytes === null ? null : Number(row.max_download_bytes),
+          min_ratio: Number(row.min_ratio),
+        })),
+        progress: progressByUser,
+      };
 
       const historyUser = { id: Number(user.id), class_id: user.class_id, username: user.username };
 

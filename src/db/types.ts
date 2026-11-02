@@ -108,6 +108,16 @@ export interface StaffMessageJobsTable {
   finished_at: number | null;
 }
 
+export interface ClassRecoveryBandsTable {
+  id: Generated<number>;
+  min_download_bytes: number;
+  max_download_bytes: number | null;
+  min_ratio: number;
+  display_order: number;
+  created_at: number;
+  updated_at: number;
+}
+
 export interface UsersTable {
   id: Generated<number>;
   username: string;
@@ -595,6 +605,7 @@ export interface Database {
   appeals: AppealsTable;
   appeal_messages: AppealMessagesTable;
   classes: ClassesTable;
+  class_recovery_bands: ClassRecoveryBandsTable;
   user_permission_overrides: UserPermissionOverridesTable;
   user_class_history: UserClassHistoryTable;
   class_recalc_runs: ClassRecalcRunsTable;

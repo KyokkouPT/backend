@@ -55,6 +55,7 @@ describe("migrations", () => {
         { version: 25, name: "staff_operations" },
         { version: 26, name: "leechwarn_recovery" },
         { version: 27, name: "class_reward_once" },
+        { version: 28, name: "class_recovery_bands" },
       ]);
 
       const users = await db.selectFrom("users").selectAll().execute();
