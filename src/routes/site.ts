@@ -138,6 +138,9 @@ function buildNav(options: { loggedIn: boolean; staffPermissions: string[] }): S
       {
         label: "运营",
         items: [
+          ...(options.staffPermissions.includes(PERMISSIONS.staffOperations)
+            ? [{ key: "staff-operations", href: "/staff/operations", label: "运营设置", icon: "activity" }]
+            : []),
           ...(options.staffPermissions.includes(PERMISSIONS.staffBonusShop)
             ? [{ key: "staff-bonus", href: "/staff/bonus", label: "魔力值商店", icon: "sparkles" }]
             : []),

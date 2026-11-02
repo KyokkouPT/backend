@@ -10,10 +10,12 @@ import {
   createCategoryBody,
   createSectionBody,
   staffActionResponse,
+  staffOperationsResponse,
   staffSectionsResponse,
   staffSettingsResponse,
   updateCategoryBody,
   updateSectionBody,
+  updateStaffOperationsBody,
   updateStaffSettingsBody,
   type StaffSectionItem,
 } from "@kyokkou/contracts";
@@ -30,6 +32,14 @@ function requireSettings(request: Parameters<typeof requireAuth>[0]) {
   const auth = requireAuth(request);
   if (!auth.permissions.includes(PERMISSIONS.staffSettings)) {
     throw new HttpProblem(403, "forbidden", "没有权限");
+  }
+  return auth;
+}
+
+function requireOperations(request: Parameters<typeof requireAuth>[0]) {
+  const auth = requireAuth(request);
+  if (!auth.permissions.includes(PERMISSIONS.staffOperations)) {
+    throw new HttpProblem(403, "forbidden", "没有运营设置权限");
   }
   return auth;
 }
@@ -169,6 +179,107 @@ export function staffSettingsRoutes(deps: { db: Db }): FastifyPluginAsync {
         .execute();
 
       return staffSettingsResponse.parse({ settings: validated });
+    });
+
+    app.get(`${API_PREFIX}/staff/operations`, async (request) => {
+      requireOperations(request);
+      const settings = await loadSettings(db);
+      return staffOperationsResponse.parse({
+        settings: {
+          economy: settings.economy,
+          shop: settings.shop,
+          bonus: {
+            ...settings.bonus,
+            next_run_at: nextRunAt(settings.bonus.cron),
+            default_formula: DEFAULT_BONUS_FORMULA,
+          },
+          seed_points: {
+            ...settings.seed_points,
+            default_formula: DEFAULT_SEED_POINTS_FORMULA,
+          },
+        },
+      });
+    });
+
+    app.put(`${API_PREFIX}/staff/operations`, async (request) => {
+      const auth = requireOperations(request);
+      assertCsrf(request, auth.session);
+      const body = parseOrThrow(updateStaffOperationsBody, request.body ?? {});
+      const current = await loadSettings(db);
+      const merged = settingsSchema.parse({
+        ...current,
+        economy: { ...current.economy, ...(body.economy ?? {}) },
+        shop: { ...current.shop, ...(body.shop ?? {}) },
+        bonus: { ...current.bonus, ...(body.bonus ?? {}) },
+        seed_points: { ...current.seed_points, ...(body.seed_points ?? {}) },
+      });
+
+      if (body.bonus !== undefined) {
+        const checked = nextRunAt(merged.bonus.cron);
+        if (checked === null) {
+          throw new HttpProblem(400, "invalid_cron", "魔力值 cron 表达式无效或间隔小于 5 分钟");
+        }
+        try {
+          compileFormula(merged.bonus.formula);
+        } catch (error) {
+          if (error instanceof FormulaError) {
+            throw new HttpProblem(
+              400,
+              "invalid_formula",
+              `公式错误（${String(error.line)}:${String(error.column)}）：${error.message}`,
+            );
+          }
+          throw error;
+        }
+      }
+      if (body.seed_points !== undefined) {
+        try {
+          compileFormula(merged.seed_points.formula);
+        } catch (error) {
+          if (error instanceof FormulaError) {
+            throw new HttpProblem(
+              400,
+              "invalid_formula",
+              `做种积分公式错误（${String(error.line)}:${String(error.column)}）：${error.message}`,
+            );
+          }
+          throw error;
+        }
+      }
+
+      for (const key of ["economy", "shop", "bonus", "seed_points"] as const) {
+        if (body[key] !== undefined) await saveSetting(db, key, merged[key]);
+      }
+      if (body.bonus !== undefined) await reloadSchedulers(db);
+
+      await db
+        .insertInto("audit_logs")
+        .values({
+          actor_id: Number(auth.user.id),
+          action: "operations.update",
+          target_type: "settings",
+          target_id: "operations",
+          detail_json: JSON.stringify({ keys: Object.keys(body) }),
+          ip: request.ip,
+          created_at: Date.now(),
+        })
+        .execute();
+
+      return staffOperationsResponse.parse({
+        settings: {
+          economy: merged.economy,
+          shop: merged.shop,
+          bonus: {
+            ...merged.bonus,
+            next_run_at: nextRunAt(merged.bonus.cron),
+            default_formula: DEFAULT_BONUS_FORMULA,
+          },
+          seed_points: {
+            ...merged.seed_points,
+            default_formula: DEFAULT_SEED_POINTS_FORMULA,
+          },
+        },
+      });
     });
 
     app.post(`${API_PREFIX}/staff/bonus/formula/preview`, async (request) => {

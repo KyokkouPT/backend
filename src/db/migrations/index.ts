@@ -23,6 +23,7 @@ import { migration021 } from "./021_staff_message_jobs.js";
 import { migration022 } from "./022_assessments.js";
 import { migration023 } from "./023_assessment_auto.js";
 import { migration024 } from "./024_seed_points.js";
+import { migration025 } from "./025_staff_operations.js";
 
 /** 有序迁移清单；新增迁移只追加，不改历史版本。 */
 export const migrations: Migration[] = [
@@ -50,6 +51,7 @@ export const migrations: Migration[] = [
   migration022,
   migration023,
   migration024,
+  migration025,
 ];
 
 export const LATEST_SCHEMA_VERSION = migrations.reduce(

@@ -102,6 +102,7 @@ export const OWNER_PERMISSIONS = [
   ...USER_EDIT_SENSITIVE_PERMISSIONS,
   ...USER_EXTRA_PERMISSIONS,
   "staff.bonus_shop",
+  "staff.operations",
   "torrent.auto_approve",
   "torrent.anonymous",
   "user.donor",

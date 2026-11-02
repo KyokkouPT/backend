@@ -75,10 +75,49 @@ describe("staff settings", () => {
     expect((rules.json() as { content: string }).content).toContain("**规则**");
   });
 
+  it("manages operations settings with an independent permission", async () => {
+    const current = await ctx.app.inject({
+      method: "GET",
+      url: `${API_PREFIX}/staff/operations`,
+      headers: { cookie: admin.cookieHeader },
+    });
+    expect(current.statusCode).toBe(200);
+    const initial = (current.json() as {
+      settings: { economy: { bonus_enabled: boolean }; shop: { rename_cooldown_days: number } };
+    }).settings;
+    expect(initial.shop.rename_cooldown_days).toBeGreaterThanOrEqual(0);
+
+    const updated = await ctx.app.inject({
+      method: "PUT",
+      url: `${API_PREFIX}/staff/operations`,
+      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
+      payload: { economy: { bonus_enabled: false } },
+    });
+    expect(updated.statusCode).toBe(200);
+    expect(
+      (updated.json() as { settings: { economy: { bonus_enabled: boolean } } }).settings.economy
+        .bonus_enabled,
+    ).toBe(false);
+
+    const denied = await ctx.app.inject({
+      method: "GET",
+      url: `${API_PREFIX}/staff/operations`,
+      headers: { cookie: user.cookieHeader },
+    });
+    expect(denied.statusCode).toBe(403);
+
+    await ctx.app.inject({
+      method: "PUT",
+      url: `${API_PREFIX}/staff/operations`,
+      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
+      payload: { economy: { bonus_enabled: true } },
+    });
+  });
+
   it("updates the independent seed points formula", async () => {
     const updated = await ctx.app.inject({
       method: "PUT",
-      url: `${API_PREFIX}/staff/settings`,
+      url: `${API_PREFIX}/staff/operations`,
       headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
       payload: { seed_points: { formula: "result = seeders * 2" } },
     });
@@ -90,7 +129,7 @@ describe("staff settings", () => {
 
     const invalid = await ctx.app.inject({
       method: "PUT",
-      url: `${API_PREFIX}/staff/settings`,
+      url: `${API_PREFIX}/staff/operations`,
       headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
       payload: { seed_points: { formula: "result = " } },
     });

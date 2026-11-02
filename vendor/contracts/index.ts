@@ -65,6 +65,7 @@ export const PERMISSIONS = {
   staffAnomalies: "staff.anomalies",
   staffAudit: "staff.audit",
   staffSettings: "staff.settings",
+  staffOperations: "staff.operations",
   staffClasses: "staff.classes",
   staffAppeals: "staff.appeals",
   staffAnnouncement: "staff.announcement",
@@ -1115,6 +1116,25 @@ export const updateStaffSettingsBody = z.object({
   shop: staffSettings.shape.shop.partial().optional(),
 });
 export type UpdateStaffSettingsBody = z.infer<typeof updateStaffSettingsBody>;
+
+export const staffOperationsSettings = z.object({
+  economy: staffSettings.shape.economy,
+  shop: staffSettings.shape.shop,
+  bonus: staffSettings.shape.bonus,
+  seed_points: staffSettings.shape.seed_points,
+});
+export type StaffOperationsSettings = z.infer<typeof staffOperationsSettings>;
+
+export const staffOperationsResponse = z.object({ settings: staffOperationsSettings });
+export type StaffOperationsResponse = z.infer<typeof staffOperationsResponse>;
+
+export const updateStaffOperationsBody = z.object({
+  economy: staffSettings.shape.economy.partial().optional(),
+  shop: staffSettings.shape.shop.partial().optional(),
+  bonus: staffSettings.shape.bonus.omit({ next_run_at: true, default_formula: true }).partial().optional(),
+  seed_points: staffSettings.shape.seed_points.omit({ default_formula: true }).partial().optional(),
+});
+export type UpdateStaffOperationsBody = z.infer<typeof updateStaffOperationsBody>;
 
 export const staffCategoryItem = z.object({
   id: z.number().int(),
