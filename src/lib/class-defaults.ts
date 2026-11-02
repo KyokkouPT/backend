@@ -190,7 +190,13 @@ export const DEFAULT_CLASSES: DefaultClass[] = [
     permissions: [...BASE_PERMISSIONS],
     inviteQuota: 0,
     autoApproveQuota: 0,
-    promoteRule: { logic: "all", conditions: [] },
+    promoteRule: {
+      logic: "any",
+      conditions: [
+        { metric: "ratio", op: ">=", value: 0.4 },
+        { metric: "downloaded", op: "<=", value: 50, unit: "GB" },
+      ],
+    },
     demoteRule: null,
     promoteGraceDays: 0,
     demoteGraceDays: 0,

@@ -175,7 +175,9 @@ export async function decidePromotion(
     }
 
     const promoteRule = parseRule(next.promote_rule_json);
-    if (!promoteRule) break;
+    // 空条件不能被当成“无条件升级”：否则受限等级会在每次重算时被
+    // 自动升回新用户，再被分享率矩阵降回受限，形成历史记录反复横跳。
+    if (!promoteRule || promoteRule.conditions.length === 0) break;
     if (!evaluateRule(promoteRule, metrics)) {
       return { steps, missing: missingConditions(promoteRule, metrics), blocked: null };
     }

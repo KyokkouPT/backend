@@ -401,6 +401,63 @@ describe("class system", () => {
     expect((runs.json() as { items: unknown[] }).items.length).toBeGreaterThanOrEqual(2);
   });
 
+  it("does not auto-promote out of leechwarn through an empty rule", async () => {
+    const target = await userId("axue");
+    const leechwarn = await ctx.db
+      .selectFrom("classes")
+      .select("id")
+      .where("slug", "=", "leechwarn")
+      .executeTakeFirstOrThrow();
+    await ctx.db
+      .updateTable("users")
+      .set({
+        class_id: Number(leechwarn.id),
+        class_key: "leechwarn",
+        uploaded: 2 * 1024 ** 3,
+        downloaded: 100 * 1024 ** 3,
+        demote_due_at: null,
+        class_locked_until: null,
+      })
+      .where("id", "=", target)
+      .execute();
+
+    const res = await ctx.app.inject({
+      method: "POST",
+      url: `${API_PREFIX}/staff/classes/recalc`,
+      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
+      payload: {},
+    });
+    expect(res.statusCode).toBe(200);
+
+    const row = await ctx.db
+      .selectFrom("users as u")
+      .innerJoin("classes as c", "c.id", "u.class_id")
+      .select("c.slug")
+      .where("u.id", "=", target)
+      .executeTakeFirstOrThrow();
+    expect(row.slug).toBe("leechwarn");
+
+    // 恢复分享率后应自动回到新用户，而不是永久卡在受限。
+    await ctx.db
+      .updateTable("users")
+      .set({ uploaded: 60 * 1024 ** 3 })
+      .where("id", "=", target)
+      .execute();
+    await ctx.app.inject({
+      method: "POST",
+      url: `${API_PREFIX}/staff/classes/recalc`,
+      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
+      payload: {},
+    });
+    const recovered = await ctx.db
+      .selectFrom("users as u")
+      .innerJoin("classes as c", "c.id", "u.class_id")
+      .select("c.slug")
+      .where("u.id", "=", target)
+      .executeTakeFirstOrThrow();
+    expect(recovered.slug).toBe("user");
+  });
+
   it("uses the configured global matrix target and rejects unknown targets", async () => {
     const rulesResponse = await ctx.app.inject({
       method: "GET",
