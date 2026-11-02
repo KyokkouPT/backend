@@ -123,7 +123,7 @@ function buildNav(options: { loggedIn: boolean; staffPermissions: string[] }): S
           ...(options.staffPermissions.includes(PERMISSIONS.staffClasses)
             ? [
                 { key: "staff-classes", href: "/staff/classes", label: "等级管理", icon: "layers", exact: true },
-                { key: "staff-class-rules", href: "/staff/classes/rules", label: "等级规则", icon: "settings", exact: true },
+                { key: "staff-class-rules", href: "/staff/classes/rules", label: "等级设置", icon: "settings", exact: true },
                 { key: "staff-assessments", href: "/staff/assessments", label: "考核任务", icon: "clipboard-check", exact: true },
               ]
             : []),

@@ -1574,6 +1574,22 @@ export const classRulesSettings = z.object({
 });
 export type ClassRulesSettings = z.infer<typeof classRulesSettings>;
 
+export const classSchedulerSettings = z.object({
+  recalc_enabled: z.boolean(),
+  recalc_cron: z.string(),
+  next_run_at: z.number().nullable().optional(),
+});
+export type ClassSchedulerSettings = z.infer<typeof classSchedulerSettings>;
+
+export const classSchedulerResponse = z.object({ settings: classSchedulerSettings });
+export type ClassSchedulerResponse = z.infer<typeof classSchedulerResponse>;
+
+export const updateClassSchedulerBody = z.object({
+  recalc_enabled: z.boolean().optional(),
+  recalc_cron: z.string().min(5).max(64).optional(),
+});
+export type UpdateClassSchedulerBody = z.infer<typeof updateClassSchedulerBody>;
+
 export const classNotificationTemplates = z.object({
   promote: z.string().max(500),
   demote: z.string().max(500),

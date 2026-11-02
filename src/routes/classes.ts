@@ -7,6 +7,7 @@ import {
   classNotificationTemplates,
   classRecalcResponse,
   classRulesSettings,
+  classSchedulerResponse,
   classSimulationRequest,
   classSimulationResponse,
   classSimulationSearchResponse,
@@ -14,6 +15,7 @@ import {
   classesResponse,
   createClassBody,
   updateClassBody,
+  updateClassSchedulerBody,
   userPermissionOverridesBody,
   userPermissionOverridesResponse,
   staffActionResponse,
@@ -44,6 +46,9 @@ import { loadClassRules, runClassRecalc, saveClassRules } from "../lib/class-rec
 import { loadClassTemplates, notifyClassChange, saveClassTemplates } from "../lib/class-notifications.js";
 import { HttpProblem, badRequest, conflict, notFound } from "../lib/problem.js";
 import { parseOrThrow } from "../lib/validate.js";
+import { settingsSchema } from "@kyokkou/config";
+import { loadSettings } from "../lib/settings.js";
+import { nextRunAt, reloadSchedulers } from "../lib/scheduler.js";
 
 function requirePerm(request: FastifyRequest, permission: string) {
   const auth = requireAuth(request);
@@ -51,6 +56,21 @@ function requirePerm(request: FastifyRequest, permission: string) {
     throw new HttpProblem(403, "forbidden", "没有权限");
   }
   return auth;
+}
+
+async function saveClassesSetting(db: Db, value: unknown): Promise<void> {
+  const now = Date.now();
+  const updated = await db
+    .updateTable("site_settings")
+    .set({ value_json: JSON.stringify(value), updated_at: now })
+    .where("key", "=", "classes")
+    .execute();
+  if (Number(updated[0]?.numUpdatedRows ?? 0) === 0) {
+    await db
+      .insertInto("site_settings")
+      .values({ key: "classes", value_json: JSON.stringify(value), updated_at: now })
+      .execute();
+  }
 }
 
 function classItem(row: ClassRow, memberCount?: number): ClassItem {
@@ -544,8 +564,61 @@ export function classRoutes(deps: { db: Db }): FastifyPluginAsync {
       });
     });
 
+    app.get(`${API_PREFIX}/staff/classes/scheduler`, async (request) => {
+      const auth = requirePerm(request, PERMISSIONS.staffClasses);
+      const settings = await loadSettings(db);
+      return classSchedulerResponse.parse({
+        settings: {
+          recalc_enabled: settings.classes.recalc_enabled,
+          recalc_cron: settings.classes.recalc_cron,
+          next_run_at: settings.classes.recalc_enabled
+            ? nextRunAt(settings.classes.recalc_cron)
+            : null,
+        },
+      });
+    });
+
+    app.put(`${API_PREFIX}/staff/classes/scheduler`, async (request) => {
+      const auth = requirePerm(request, PERMISSIONS.staffClasses);
+      assertCsrf(request, auth.session);
+      const body = parseOrThrow(updateClassSchedulerBody, request.body ?? {});
+      const current = await loadSettings(db);
+      const merged = settingsSchema.parse({
+        ...current,
+        classes: {
+          ...current.classes,
+          ...body,
+        },
+      });
+      const next = nextRunAt(merged.classes.recalc_cron);
+      if (next === null) {
+        throw new HttpProblem(400, "invalid_cron", "cron 表达式无效或间隔小于 5 分钟");
+      }
+      await saveClassesSetting(db, merged.classes);
+      await reloadSchedulers(db);
+      await db
+        .insertInto("audit_logs")
+        .values({
+          actor_id: Number(auth.user.id),
+          action: "classes.scheduler.update",
+          target_type: "settings",
+          target_id: "classes",
+          detail_json: JSON.stringify({ recalc_enabled: merged.classes.recalc_enabled }),
+          ip: request.ip,
+          created_at: Date.now(),
+        })
+        .execute();
+      return classSchedulerResponse.parse({
+        settings: {
+          recalc_enabled: merged.classes.recalc_enabled,
+          recalc_cron: merged.classes.recalc_cron,
+          next_run_at: merged.classes.recalc_enabled ? next : null,
+        },
+      });
+    });
+
     app.post(`${API_PREFIX}/staff/classes/recalc`, async (request) => {
-      const auth = requirePerm(request, PERMISSIONS.staffSettings);
+      const auth = requirePerm(request, PERMISSIONS.staffClasses);
       assertCsrf(request, auth.session);
       const result = await runClassRecalc(db, {
         triggeredBy: "manual",
@@ -555,7 +628,7 @@ export function classRoutes(deps: { db: Db }): FastifyPluginAsync {
     });
 
     app.get(`${API_PREFIX}/staff/classes/runs`, async (request) => {
-      requirePerm(request, PERMISSIONS.staffSettings);
+      requirePerm(request, PERMISSIONS.staffClasses);
       const rows = await db
         .selectFrom("class_recalc_runs")
         .selectAll()
