@@ -94,42 +94,69 @@ function buildNav(options: { loggedIn: boolean; staffPermissions: string[] }): S
 
   const staff: NavGroup[] = [];
   if (options.staffPermissions.length > 0) {
-    staff.push({
-      items: [
-        { key: "staff", href: "/staff", label: "概览", icon: "gauge", exact: true },
-        { key: "staff-review", href: "/staff/review", label: "审核台", icon: "clipboard-check" },
-        { key: "staff-reports", href: "/staff/reports", label: "举报", icon: "alert-triangle" },
-        { key: "staff-users", href: "/staff/users", label: "用户管理", icon: "user-cog" },
-        ...(options.staffPermissions.includes(PERMISSIONS.staffBonusShop)
-          ? [{ key: "staff-bonus", href: "/staff/bonus", label: "魔力值商店", icon: "sparkles" }]
-          : []),
-        ...(options.staffPermissions.includes(PERMISSIONS.staffClasses)
-          ? [
-              { key: "staff-classes", href: "/staff/classes", label: "等级管理", icon: "layers", exact: true },
-              { key: "staff-class-rules", href: "/staff/classes/rules", label: "等级规则", icon: "settings", exact: true },
-              { key: "staff-assessments", href: "/staff/assessments", label: "考核任务", icon: "clipboard-check", exact: true },
-            ]
-          : []),
-        ...(options.staffPermissions.includes(PERMISSIONS.staffClassSimulate)
-          ? [{ key: "staff-class-simulate", href: "/staff/classes/simulate", label: "升降模拟", icon: "activity", exact: true }]
-          : []),
-        ...(options.staffPermissions.includes(PERMISSIONS.staffClassHistory)
-          ? [{ key: "staff-class-history", href: "/staff/classes/history", label: "等级历史", icon: "history", exact: true }]
-          : []),
-        { key: "staff-anomalies", href: "/staff/anomalies", label: "反作弊", icon: "shield-alert" },
-        { key: "staff-audit", href: "/staff/audit", label: "审计日志", icon: "scroll-text" },
-        { key: "staff-appeals", href: "/staff/appeals", label: "申诉", icon: "clipboard-check" },
-        ...(options.staffPermissions.includes(PERMISSIONS.staffAnnouncement)
-          ? [{ key: "staff-messages", href: "/staff/messages", label: "站内信", icon: "mail" }]
-          : []),
-        ...(options.staffPermissions.includes(PERMISSIONS.staffSettings)
-          ? [
-              { key: "staff-settings", href: "/staff/settings", label: "站点设置", icon: "settings" },
-              { key: "staff-sections", href: "/staff/sections", label: "分区", icon: "layers" },
-            ]
-          : []),
-      ],
-    });
+    const staffGroups: NavGroup[] = [
+      {
+        label: "概览",
+        items: [{ key: "staff", href: "/staff", label: "概览", icon: "gauge", exact: true }],
+      },
+      {
+        label: "内容审核",
+        items: [
+          { key: "staff-review", href: "/staff/review", label: "审核台", icon: "clipboard-check" },
+          { key: "staff-reports", href: "/staff/reports", label: "举报", icon: "alert-triangle" },
+          { key: "staff-anomalies", href: "/staff/anomalies", label: "反作弊", icon: "shield-alert" },
+        ],
+      },
+      {
+        label: "用户与社区",
+        items: [
+          { key: "staff-users", href: "/staff/users", label: "用户管理", icon: "user-cog" },
+          { key: "staff-appeals", href: "/staff/appeals", label: "申诉", icon: "clipboard-check" },
+          ...(options.staffPermissions.includes(PERMISSIONS.staffAnnouncement)
+            ? [{ key: "staff-messages", href: "/staff/messages", label: "站内信", icon: "mail" }]
+            : []),
+        ],
+      },
+      {
+        label: "等级与考核",
+        items: [
+          ...(options.staffPermissions.includes(PERMISSIONS.staffClasses)
+            ? [
+                { key: "staff-classes", href: "/staff/classes", label: "等级管理", icon: "layers", exact: true },
+                { key: "staff-class-rules", href: "/staff/classes/rules", label: "等级规则", icon: "settings", exact: true },
+                { key: "staff-assessments", href: "/staff/assessments", label: "考核任务", icon: "clipboard-check", exact: true },
+              ]
+            : []),
+          ...(options.staffPermissions.includes(PERMISSIONS.staffClassSimulate)
+            ? [{ key: "staff-class-simulate", href: "/staff/classes/simulate", label: "升降模拟", icon: "activity", exact: true }]
+            : []),
+          ...(options.staffPermissions.includes(PERMISSIONS.staffClassHistory)
+            ? [{ key: "staff-class-history", href: "/staff/classes/history", label: "等级历史", icon: "history", exact: true }]
+            : []),
+        ],
+      },
+      {
+        label: "运营",
+        items: [
+          ...(options.staffPermissions.includes(PERMISSIONS.staffBonusShop)
+            ? [{ key: "staff-bonus", href: "/staff/bonus", label: "魔力值商店", icon: "sparkles" }]
+            : []),
+        ],
+      },
+      {
+        label: "系统",
+        items: [
+          ...(options.staffPermissions.includes(PERMISSIONS.staffSettings)
+            ? [
+                { key: "staff-settings", href: "/staff/settings", label: "站点设置", icon: "settings" },
+                { key: "staff-sections", href: "/staff/sections", label: "分区", icon: "layers" },
+              ]
+            : []),
+          { key: "staff-audit", href: "/staff/audit", label: "审计日志", icon: "scroll-text" },
+        ],
+      },
+    ];
+    staff.push(...staffGroups.filter((group) => group.items.length > 0));
   }
 
   return { site: groups, staff };
