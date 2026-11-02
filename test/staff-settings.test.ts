@@ -75,6 +75,28 @@ describe("staff settings", () => {
     expect((rules.json() as { content: string }).content).toContain("**规则**");
   });
 
+  it("updates the independent seed points formula", async () => {
+    const updated = await ctx.app.inject({
+      method: "PUT",
+      url: `${API_PREFIX}/staff/settings`,
+      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
+      payload: { seed_points: { formula: "result = seeders * 2" } },
+    });
+    expect(updated.statusCode).toBe(200);
+    expect(
+      (updated.json() as { settings: { seed_points: { formula: string } } }).settings.seed_points
+        .formula,
+    ).toBe("result = seeders * 2");
+
+    const invalid = await ctx.app.inject({
+      method: "PUT",
+      url: `${API_PREFIX}/staff/settings`,
+      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
+      payload: { seed_points: { formula: "result = " } },
+    });
+    expect(invalid.statusCode).toBe(400);
+  });
+
   it("rejects invalid settings and non-admin access", async () => {
     const invalid = await ctx.app.inject({
       method: "PUT",

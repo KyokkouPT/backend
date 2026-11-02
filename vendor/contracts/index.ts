@@ -1085,6 +1085,10 @@ export const staffSettings = z.object({
     next_run_at: z.number().nullable().optional(),
     default_formula: z.string().optional(),
   }),
+  seed_points: z.object({
+    formula: z.string().min(1).max(2000),
+    default_formula: z.string().optional(),
+  }),
   shop: z.object({
     rename_cooldown_days: z.number().int().min(0).max(3650),
     username_reserve_days: z.number().int().min(0).max(3650),
@@ -1107,6 +1111,7 @@ export const updateStaffSettingsBody = z.object({
   review: staffSettings.shape.review.partial().optional(),
   classes: staffSettings.shape.classes.omit({ next_run_at: true }).partial().optional(),
   bonus: staffSettings.shape.bonus.omit({ next_run_at: true, default_formula: true }).partial().optional(),
+  seed_points: staffSettings.shape.seed_points.omit({ default_formula: true }).partial().optional(),
   shop: staffSettings.shape.shop.partial().optional(),
 });
 export type UpdateStaffSettingsBody = z.infer<typeof updateStaffSettingsBody>;

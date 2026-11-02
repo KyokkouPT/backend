@@ -3,7 +3,7 @@ import type { Settings } from "@kyokkou/config";
 import type { Db } from "../db/db.js";
 import { loadSettings } from "./settings.js";
 import { runClassRecalc } from "./class-recalc.js";
-import { runBonusSettlement } from "./bonus.js";
+import { runBonusSettlement, runSeedPointsSettlement } from "./bonus.js";
 
 export const MIN_CRON_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -143,6 +143,12 @@ async function runJob(job: JobState): Promise<void> {
     if (job.key === "bonus") {
       const result = await runBonusSettlement(db, { intervalMs, triggeredBy: "cron" });
       logger?.info({ ...result, intervalMs }, "bonus settlement finished");
+      try {
+        const seedPoints = await runSeedPointsSettlement(db, { intervalMs });
+        logger?.info({ ...seedPoints, intervalMs }, "seed points settlement finished");
+      } catch (error) {
+        logger?.error({ error: String(error) }, "seed points settlement failed");
+      }
     } else {
       const result = await runClassRecalc(db, { triggeredBy: "cron", actorId: null });
       logger?.info(result, "class recalc finished");

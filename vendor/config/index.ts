@@ -83,6 +83,28 @@ A = sum(
 result = (bzero * 2 / pi * atan(A / l)) + perseeding * min(seeders, maxseeding)
 result = result * if(is_donor, donor_multiplier, 1)`;
 
+/** NexusPHP 的 seed_points 公式：基础做种产出，不叠加捐赠/勋章等魔力倍率。 */
+export const DEFAULT_SEED_POINTS_FORMULA = `perseeding = 1
+maxseeding = 7
+tzero = 4
+nzero = 7
+bzero = 100
+l = 300
+zero_weight = 0.2
+
+A = sum(
+  (1 - 10 ^ (-t.age_weeks / tzero))
+  * t.size_gb
+  * (1 + sqrt(2) * 10 ^ (-(t.seeders - 1) / (nzero - 1)))
+  * if(t.is_zero_bonus, zero_weight, 1)
+)
+
+result = (bzero * 2 / pi * atan(A / l)) + perseeding * min(seeders, maxseeding)`;
+
+export const seedPointsSettings = z.object({
+  formula: z.string().min(1).max(2000),
+});
+
 export const SETTING_KEYS = [
   "site",
   "registration",
@@ -91,6 +113,7 @@ export const SETTING_KEYS = [
   "review",
   "classes",
   "bonus",
+  "seed_points",
   "shop",
 ] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
@@ -103,6 +126,7 @@ export const settingsSchema = z.object({
   review: reviewSettings,
   classes: classesSettings,
   bonus: bonusSettings,
+  seed_points: seedPointsSettings,
   shop: shopSettings,
 });
 
@@ -113,6 +137,7 @@ export type EconomySettings = z.infer<typeof economySettings>;
 export type ReviewSettings = z.infer<typeof reviewSettings>;
 export type ClassesSettings = z.infer<typeof classesSettings>;
 export type BonusSettings = z.infer<typeof bonusSettings>;
+export type SeedPointsSettings = z.infer<typeof seedPointsSettings>;
 export type ShopSettings = z.infer<typeof shopSettings>;
 export type Settings = z.infer<typeof settingsSchema>;
 
@@ -157,6 +182,9 @@ export const DEFAULT_SETTINGS: Settings = {
   bonus: {
     cron: "0 * * * *",
     formula: DEFAULT_BONUS_FORMULA,
+  },
+  seed_points: {
+    formula: DEFAULT_SEED_POINTS_FORMULA,
   },
   shop: {
     rename_cooldown_days: 30,

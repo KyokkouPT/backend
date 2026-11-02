@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestContext, type TestContext } from "./helpers.js";
-import { runBonusSettlement } from "../src/lib/bonus.js";
+import { runBonusSettlement, runSeedPointsSettlement } from "../src/lib/bonus.js";
 
 let ctx: TestContext;
 let userId = 0;
@@ -11,6 +11,15 @@ async function setFormula(formula: string): Promise<void> {
   await ctx.db
     .insertInto("site_settings")
     .values({ key: "bonus", value_json: value, updated_at: Date.now() })
+    .onConflict((oc) => oc.column("key").doUpdateSet({ value_json: value, updated_at: Date.now() }))
+    .execute();
+}
+
+async function setSeedPointsFormula(formula: string): Promise<void> {
+  const value = JSON.stringify({ formula });
+  await ctx.db
+    .insertInto("site_settings")
+    .values({ key: "seed_points", value_json: value, updated_at: Date.now() })
     .onConflict((oc) => oc.column("key").doUpdateSet({ value_json: value, updated_at: Date.now() }))
     .execute();
 }
@@ -76,7 +85,27 @@ afterAll(async () => {
 });
 
 describe("bonus settlement", () => {
+  it("accrues seed points independently from bonus", async () => {
+    await setFormula("result = 10");
+    await setSeedPointsFormula("result = 3");
+    await ctx.db
+      .updateTable("users")
+      .set({ bonus: 0, seed_points: 0, bonus_frozen_until: null })
+      .where("id", "=", userId)
+      .execute();
+    await runBonusSettlement(ctx.db, { intervalMs: 60 * 60 * 1000 });
+    await runSeedPointsSettlement(ctx.db, { intervalMs: 60 * 60 * 1000 });
+    const after = await ctx.db
+      .selectFrom("users")
+      .select(["bonus", "seed_points"])
+      .where("id", "=", userId)
+      .executeTakeFirstOrThrow();
+    expect(Number(after.bonus)).toBeCloseTo(10, 8);
+    expect(Number(after.seed_points)).toBeCloseTo(3, 8);
+  });
+
   it("credits a fractional hourly rate by the nominal interval", async () => {
+    await ctx.db.deleteFrom("bonus_ledger").execute();
     await setFormula("result = seeders * 10");
     await ctx.db.updateTable("users").set({ bonus: 0, bonus_frozen_until: null }).where("id", "=", userId).execute();
     const result = await runBonusSettlement(ctx.db, { intervalMs: 15 * 60 * 1000 });

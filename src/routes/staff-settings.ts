@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
-import { DEFAULT_BONUS_FORMULA, SETTING_KEYS, settingsSchema } from "@kyokkou/config";
+import { DEFAULT_BONUS_FORMULA, DEFAULT_SEED_POINTS_FORMULA, SETTING_KEYS, settingsSchema } from "@kyokkou/config";
 import {
   API_PREFIX,
   PERMISSIONS,
@@ -79,6 +79,10 @@ export function staffSettingsRoutes(deps: { db: Db }): FastifyPluginAsync {
             next_run_at: nextRunAt(settings.bonus.cron),
             default_formula: DEFAULT_BONUS_FORMULA,
           },
+          seed_points: {
+            ...settings.seed_points,
+            default_formula: DEFAULT_SEED_POINTS_FORMULA,
+          },
         },
       });
     });
@@ -97,6 +101,7 @@ export function staffSettingsRoutes(deps: { db: Db }): FastifyPluginAsync {
         review: { ...current.review, ...(body.review ?? {}) },
         classes: { ...current.classes, ...(body.classes ?? {}) },
         bonus: { ...current.bonus, ...(body.bonus ?? {}) },
+        seed_points: { ...current.seed_points, ...(body.seed_points ?? {}) },
         shop: { ...current.shop, ...(body.shop ?? {}) },
       };
       const validated = settingsSchema.parse(merged);
@@ -121,6 +126,21 @@ export function staffSettingsRoutes(deps: { db: Db }): FastifyPluginAsync {
               400,
               "invalid_formula",
               `公式错误（${String(error.line)}:${String(error.column)}）：${error.message}`,
+            );
+          }
+          throw error;
+        }
+      }
+
+      if (body.seed_points !== undefined) {
+        try {
+          compileFormula(validated.seed_points.formula);
+        } catch (error) {
+          if (error instanceof FormulaError) {
+            throw new HttpProblem(
+              400,
+              "invalid_formula",
+              `做种积分公式错误（${String(error.line)}:${String(error.column)}）：${error.message}`,
             );
           }
           throw error;

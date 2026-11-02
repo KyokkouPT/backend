@@ -1,4 +1,4 @@
-import { DEFAULT_BONUS_FORMULA } from "@kyokkou/config";
+import { DEFAULT_BONUS_FORMULA, DEFAULT_SEED_POINTS_FORMULA } from "@kyokkou/config";
 import type { Selectable } from "kysely";
 import type { Db } from "../db/db.js";
 import type { UsersTable } from "../db/types.js";
@@ -196,13 +196,133 @@ export async function runBonusSettlement(
             .updateTable("users")
             .set((eb) => ({
               bonus: eb("bonus", "+", update.delta),
-              seed_points: eb("seed_points", "+", update.delta),
               last_bonus_at: now,
             }))
             .where("id", "=", update.id)
             .execute();
         }
         await trx.insertInto("bonus_ledger").values(ledgerRows).execute();
+      });
+      credited += updates.length;
+    }
+  }
+
+  return {
+    users,
+    credited,
+    skipped,
+    failed,
+    formula_fallback: formulaFallback,
+  };
+}
+
+async function seedPointsFormulaSource(db: Db): Promise<{ source: string; fallback: boolean }> {
+  const settings = await loadSettings(db);
+  const source = settings.seed_points.formula.trim();
+  if (source.length === 0) return { source: DEFAULT_SEED_POINTS_FORMULA, fallback: true };
+  return { source, fallback: false };
+}
+
+/**
+ * 做种积分独立结算：只累计 users.seed_points，不进入 bonus 余额/账本。
+ * 公式与魔力值共用 DSL，但默认不叠加捐赠、勋章等魔力倍率。
+ */
+export async function runSeedPointsSettlement(
+  db: Db,
+  options: { intervalMs: number },
+): Promise<BonusSettlementResult> {
+  const hours = Math.max(0, options.intervalMs) / 3_600_000;
+  const { source, fallback } = await seedPointsFormulaSource(db);
+  let formula = source;
+  let formulaFallback = fallback;
+  try {
+    evaluateFormula(formula, {
+      user: {
+        seeders: 0,
+        totalGb: 0,
+        totalBytes: 0,
+        avgSizeGb: 0,
+        uploaded: 0,
+        downloaded: 0,
+        ratio: 0,
+        ageDays: 0,
+        bonus: 0,
+        isDonor: false,
+        hour: 0,
+        dayOfWeek: 0,
+        userId: 0,
+      },
+      torrents: [],
+    });
+  } catch (error) {
+    if (error instanceof FormulaError) {
+      formula = DEFAULT_SEED_POINTS_FORMULA;
+      formulaFallback = true;
+    } else {
+      throw error;
+    }
+  }
+
+  const now = Date.now();
+  let lastId = 0;
+  let users = 0;
+  let credited = 0;
+  let skipped = 0;
+  let failed = 0;
+  const batchSize = 500;
+
+  for (;;) {
+    const ids = await db
+      .selectFrom("users")
+      .select("id")
+      .where("status", "=", "active")
+      .where("id", ">", lastId)
+      .orderBy("id", "asc")
+      .limit(batchSize)
+      .execute();
+    if (ids.length === 0) break;
+    const idList = ids.map((row) => Number(row.id));
+    lastId = idList[idList.length - 1] ?? lastId;
+    users += idList.length;
+
+    const contexts = await loadBonusContexts(db, idList, now);
+    const updates: { id: number; delta: number }[] = [];
+    for (const id of idList) {
+      const context = contexts.get(id);
+      if (!context) {
+        skipped += 1;
+        continue;
+      }
+      if (userFrozen(context, now)) {
+        skipped += 1;
+        continue;
+      }
+      try {
+        const evaluation = evaluateFormula(formula, context);
+        const delta = evaluation.result * hours;
+        if (!Number.isFinite(delta)) {
+          failed += 1;
+          continue;
+        }
+        if (delta <= 0) {
+          skipped += 1;
+          continue;
+        }
+        updates.push({ id, delta });
+      } catch {
+        failed += 1;
+      }
+    }
+
+    if (updates.length > 0) {
+      await db.transaction().execute(async (trx) => {
+        for (const update of updates) {
+          await trx
+            .updateTable("users")
+            .set((eb) => ({ seed_points: eb("seed_points", "+", update.delta) }))
+            .where("id", "=", update.id)
+            .execute();
+        }
       });
       credited += updates.length;
     }
