@@ -199,6 +199,7 @@ export function staffAdminRoutes(deps: { db: Db }): FastifyPluginAsync {
             raw_uploaded: 0,
             raw_downloaded: 0,
             invite_balance: Number(targetClass.invite_quota),
+            max_class_once: Number(targetClass.id),
             class_locked_until: null,
             demote_due_at: null,
             status: "active",

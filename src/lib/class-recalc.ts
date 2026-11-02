@@ -122,17 +122,28 @@ export async function applyClassChange(
     inviteDelta?: number;
   },
 ): Promise<void> {
+  const current = await trx
+    .selectFrom("users")
+    .select("max_class_once")
+    .where("id", "=", input.user.id)
+    .executeTakeFirst();
+  const targetId = Number(input.toClass.id);
+  const previousMax = Number(current?.max_class_once ?? 1);
+  const firstReach = targetId > previousMax;
+
   await trx
     .updateTable("users")
     .set({
-      class_id: Number(input.toClass.id),
+      class_id: targetId,
       class_key: input.toClass.slug,
       demote_due_at: null,
+      ...(firstReach ? { max_class_once: targetId } : {}),
     })
     .where("id", "=", input.user.id)
     .execute();
 
-  if (input.inviteDelta && input.inviteDelta !== 0) {
+  // NexusPHP max_class_once 语义：只有首次达到该等级才发邀请。
+  if (firstReach && input.inviteDelta && input.inviteDelta !== 0) {
     await trx
       .updateTable("users")
       .set((eb) => ({ invite_balance: eb("invite_balance", "+", input.inviteDelta as number) }))

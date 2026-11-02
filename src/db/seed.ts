@@ -516,6 +516,7 @@ export async function seedDatabase(db: Db, options: { password: string }): Promi
           class_id: classRow ? Number(classRow.id) : null,
           warnings: 0,
           invite_balance: classRow?.invite_quota ?? 0,
+          max_class_once: classRow ? Number(classRow.id) : 1,
           class_locked_until: null,
           demote_due_at: null,
           status: "active",

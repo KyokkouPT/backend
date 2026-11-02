@@ -25,6 +25,7 @@ import { migration023 } from "./023_assessment_auto.js";
 import { migration024 } from "./024_seed_points.js";
 import { migration025 } from "./025_staff_operations.js";
 import { migration026 } from "./026_leechwarn_recovery.js";
+import { migration027 } from "./027_class_reward_once.js";
 
 /** 有序迁移清单；新增迁移只追加，不改历史版本。 */
 export const migrations: Migration[] = [
@@ -54,6 +55,7 @@ export const migrations: Migration[] = [
   migration024,
   migration025,
   migration026,
+  migration027,
 ];
 
 export const LATEST_SCHEMA_VERSION = migrations.reduce(

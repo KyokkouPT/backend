@@ -338,6 +338,7 @@ describe("class system", () => {
       .set({
         class_id: Number(userClass.id),
         class_key: "user",
+        max_class_once: Number(userClass.id),
         uploaded: 200 * 1024 ** 3,
         downloaded: 60 * 1024 ** 3,
         created_at: Date.now() - 60 * 86_400_000,
@@ -391,6 +392,31 @@ describe("class system", () => {
       .where("u.id", "=", target)
       .executeTakeFirstOrThrow();
     expect(demotedRow.slug).toBe("user");
+
+    const beforeRePromotion = await ctx.db
+      .selectFrom("users")
+      .select("invite_balance")
+      .where("id", "=", target)
+      .executeTakeFirstOrThrow();
+    await ctx.db
+      .updateTable("users")
+      .set({ uploaded: 200 * 1024 ** 3, downloaded: 60 * 1024 ** 3 })
+      .where("id", "=", target)
+      .execute();
+    await ctx.app.inject({
+      method: "POST",
+      url: `${API_PREFIX}/staff/classes/recalc`,
+      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
+      payload: {},
+    });
+    const rePromoted = await ctx.db
+      .selectFrom("users as u")
+      .innerJoin("classes as c", "c.id", "u.class_id")
+      .select(["c.slug", "u.invite_balance"])
+      .where("u.id", "=", target)
+      .executeTakeFirstOrThrow();
+    expect(rePromoted.slug).toBe("member");
+    expect(Number(rePromoted.invite_balance)).toBe(Number(beforeRePromotion.invite_balance));
 
     const runs = await ctx.app.inject({
       method: "GET",

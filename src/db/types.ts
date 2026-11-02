@@ -138,6 +138,8 @@ export interface UsersTable {
   class_id: number | null;
   warnings: number;
   invite_balance: number;
+  /** 首次达到过的最高固定等级；用于防止反复升降刷邀请奖励。 */
+  max_class_once: number;
   class_locked_until: number | null;
   custom_title: string | null;
   demote_due_at: number | null;

@@ -105,6 +105,7 @@ export function setupRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginA
               raw_uploaded: 0,
               raw_downloaded: 0,
               invite_balance: 0,
+              max_class_once: 1,
               class_locked_until: null,
               demote_due_at: null,
               status: "active",

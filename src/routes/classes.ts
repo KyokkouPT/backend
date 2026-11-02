@@ -677,6 +677,7 @@ export function classRoutes(deps: { db: Db }): FastifyPluginAsync {
             class_key: toClass.slug,
             class_locked_until: expires,
             demote_due_at: null,
+            max_class_once: Math.max(Number(targetUser.max_class_once ?? 1), Number(toClass.id)),
           })
           .where("id", "=", userId)
           .execute();

@@ -54,6 +54,7 @@ describe("migrations", () => {
         { version: 24, name: "seed_points" },
         { version: 25, name: "staff_operations" },
         { version: 26, name: "leechwarn_recovery" },
+        { version: 27, name: "class_reward_once" },
       ]);
 
       const users = await db.selectFrom("users").selectAll().execute();
