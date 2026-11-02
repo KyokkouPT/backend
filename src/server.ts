@@ -5,6 +5,11 @@ import { currentSchemaVersion, runMigrations } from "./db/migrate.js";
 import { settleHnr } from "./lib/hnr.js";
 import { initSchedulers, stopSchedulers } from "./lib/scheduler.js";
 import { processQueuedStaffMessageJobs } from "./routes/staff-messages.js";
+import {
+  checkoutDueAssessments,
+  restoreSuspendedUsers,
+  updateActiveAssessments,
+} from "./lib/assessments.js";
 import { prunePeers } from "./tracker/peer-store.js";
 
 const PEER_TTL_MS = 60 * 60 * 1000;
@@ -94,6 +99,33 @@ async function main(): Promise<void> {
       .catch((error: unknown) => app.log.error(error, "staff message job worker failed"));
   }, 2_000);
   messageTimer.unref();
+
+  const assessmentProgressTimer = setInterval(() => {
+    void updateActiveAssessments(db)
+      .then((updated) => {
+        if (updated > 0) app.log.info({ updated }, "assessment progress updated");
+      })
+      .catch((error: unknown) => app.log.error(error, "assessment progress failed"));
+  }, 10 * 60 * 1000);
+  assessmentProgressTimer.unref();
+
+  const assessmentCheckoutTimer = setInterval(() => {
+    void checkoutDueAssessments(db)
+      .then((settled) => {
+        if (settled > 0) app.log.info({ settled }, "assessments settled");
+      })
+      .catch((error: unknown) => app.log.error(error, "assessment checkout failed"));
+  }, 5 * 60 * 1000);
+  assessmentCheckoutTimer.unref();
+
+  const suspendedRestoreTimer = setInterval(() => {
+    void restoreSuspendedUsers(db)
+      .then((restored) => {
+        if (restored > 0) app.log.info({ restored }, "suspended users restored");
+      })
+      .catch((error: unknown) => app.log.error(error, "suspended restore failed"));
+  }, 60 * 1000);
+  suspendedRestoreTimer.unref();
 
   // 魔力值与等级重算调度：两条 cron 独立，共用一个调度器进程。
   initSchedulers(db, app.log, config.instanceId);

@@ -109,7 +109,7 @@ export type RecalcResult = {
   demoted: number;
 };
 
-async function applyClassChange(
+export async function applyClassChange(
   trx: Kysely<Database> | Transaction<Database>,
   input: {
     user: { id: number; class_id: number | null; username: string };

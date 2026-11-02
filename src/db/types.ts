@@ -117,6 +117,7 @@ export interface UsersTable {
   role: Role;
   class_key: string;
   status: UserStatus;
+  suspended_until: number | null;
   uploaded: number;
   downloaded: number;
   /** Tracker 实际上报流量（不打折、不受魔力兑换影响）。 */
@@ -503,6 +504,60 @@ export interface AppealMessagesTable {
   created_at: number;
 }
 
+export interface AssessmentsTable {
+  id: Generated<number>;
+  token: string;
+  name: string;
+  description_markdown: string | null;
+  type: string;
+  status: string;
+  begin_at: number | null;
+  end_at: number | null;
+  duration_days: number;
+  recurring: string;
+  filters_json: string;
+  requirements_json: string;
+  success_reward_json: string;
+  failure_penalty_json: string;
+  max_participants: number;
+  allow_concurrent: number;
+  settle_early: number;
+  created_by: number;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface AssessmentAssignmentsTable {
+  id: Generated<number>;
+  token: string;
+  assessment_id: number;
+  user_id: number;
+  period_key: string;
+  status: string;
+  assigned_by: number | null;
+  assigned_at: number;
+  begin_at: number;
+  end_at: number;
+  baseline_json: string;
+  progress_json: string;
+  result_reason: string | null;
+  completed_at: number | null;
+  reward_applied: number;
+  penalty_applied: number;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface AssessmentProgressTable {
+  id: Generated<number>;
+  assignment_id: number;
+  metric: string;
+  baseline_value: number;
+  current_value: number;
+  target_value: number;
+  updated_at: number;
+}
+
 export interface Database {
   instance_meta: InstanceMetaTable;
   schema_migrations: SchemaMigrationsTable;
@@ -543,6 +598,9 @@ export interface Database {
   peers: PeersTable;
   tracker_sessions: TrackerSessionsTable;
   staff_message_jobs: StaffMessageJobsTable;
+  assessments: AssessmentsTable;
+  assessment_assignments: AssessmentAssignmentsTable;
+  assessment_progress: AssessmentProgressTable;
   username_reservations: UsernameReservationsTable;
   username_changes: UsernameChangesTable;
   user_credits: UserCreditsTable;

@@ -20,6 +20,7 @@ import { migration018 } from "./018_invite_username.js";
 import { migration019 } from "./019_invite_code_case.js";
 import { migration020 } from "./020_tracker_sessions.js";
 import { migration021 } from "./021_staff_message_jobs.js";
+import { migration022 } from "./022_assessments.js";
 
 /** 有序迁移清单；新增迁移只追加，不改历史版本。 */
 export const migrations: Migration[] = [
@@ -44,6 +45,7 @@ export const migrations: Migration[] = [
   migration019,
   migration020,
   migration021,
+  migration022,
 ];
 
 export const LATEST_SCHEMA_VERSION = migrations.reduce(

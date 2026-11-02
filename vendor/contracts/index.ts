@@ -1251,6 +1251,192 @@ export const classRule = z.object({
 });
 export type ClassRule = z.infer<typeof classRule>;
 
+/* ============================ 考核 / 任务 ============================ */
+
+export const assessmentType = z.enum(["exam", "task"]);
+export const assessmentStatus = z.enum(["draft", "active", "paused", "archived"]);
+export const assessmentAssignmentStatus = z.enum([
+  "assigned",
+  "claimed",
+  "in_progress",
+  "passed",
+  "failed",
+  "expired",
+  "cancelled",
+]);
+export const assessmentMetric = z.enum([
+  "uploaded_delta",
+  "downloaded_delta",
+  "seedtime_delta",
+  "bonus_delta",
+  "published_delta",
+  "ratio",
+  "last_active_days",
+  "warnings",
+  "hnr_unfinished",
+]);
+export const assessmentOperator = z.enum([">=", ">", "<=", "<", "==", "!="]);
+
+export const assessmentRequirementItem = z.object({
+  metric: assessmentMetric,
+  op: assessmentOperator,
+  value: z.number().min(0),
+  unit: z.literal("GB").optional(),
+});
+export type AssessmentRequirementItem = z.infer<typeof assessmentRequirementItem>;
+
+export const assessmentRequirements = z.object({
+  logic: z.enum(["all", "any"]),
+  items: z.array(assessmentRequirementItem).min(1).max(30),
+});
+export type AssessmentRequirements = z.infer<typeof assessmentRequirements>;
+
+export const assessmentFilters = z.object({
+  class_slugs: z.array(z.string().min(1).max(32)).max(100).optional(),
+  register_days: z
+    .object({ min: z.number().int().min(0).optional(), max: z.number().int().min(0).optional() })
+    .optional(),
+  donor: z.boolean().optional(),
+  user_ids: z.array(z.number().int().positive()).max(5000).optional(),
+  last_active_days: z.number().int().min(0).optional(),
+});
+export type AssessmentFilters = z.infer<typeof assessmentFilters>;
+
+export const assessmentReward = z.object({
+  bonus: z.number().min(0).default(0),
+  invite: z.number().int().min(0).default(0),
+  class_slug: z.string().min(1).max(32).nullable().optional(),
+  custom_title: z.string().min(1).max(64).nullable().optional(),
+});
+export type AssessmentReward = z.infer<typeof assessmentReward>;
+
+export const assessmentPenalty = z.object({
+  bonus: z.number().min(0).default(0),
+  invite: z.number().int().min(0).default(0),
+  warn: z.number().int().min(0).default(0),
+  class_slug: z.string().min(1).max(32).nullable().optional(),
+  suspend_days: z.number().int().min(0).max(3650).default(0),
+  ban: z.boolean().default(false),
+});
+export type AssessmentPenalty = z.infer<typeof assessmentPenalty>;
+
+export const assessmentProgressItem = z.object({
+  metric: assessmentMetric,
+  label: z.string(),
+  current: z.number(),
+  target: z.number(),
+  unit: z.literal("GB").nullable(),
+});
+export type AssessmentProgressItem = z.infer<typeof assessmentProgressItem>;
+
+export const assessmentAssignmentItem = z.object({
+  id: z.number().int(),
+  token: z.string(),
+  assessment_id: z.number().int(),
+  name: z.string(),
+  type: assessmentType,
+  description_markdown: z.string().nullable(),
+  status: assessmentAssignmentStatus,
+  begin_at: z.number(),
+  end_at: z.number(),
+  progress: z.array(assessmentProgressItem),
+  reward: assessmentReward,
+  penalty: assessmentPenalty,
+  result_reason: z.string().nullable(),
+  completed_at: z.number().nullable(),
+});
+export type AssessmentAssignmentItem = z.infer<typeof assessmentAssignmentItem>;
+
+export const assessmentOfferItem = z.object({
+  id: z.number().int(),
+  name: z.string(),
+  type: assessmentType,
+  description_markdown: z.string().nullable(),
+  begin_at: z.number().nullable(),
+  end_at: z.number().nullable(),
+  requirements: assessmentRequirements,
+  reward: assessmentReward,
+  penalty: assessmentPenalty,
+  max_participants: z.number().int(),
+  allow_concurrent: z.boolean(),
+});
+export type AssessmentOfferItem = z.infer<typeof assessmentOfferItem>;
+
+export const myAssessmentsResponse = z.object({
+  items: z.array(assessmentAssignmentItem),
+  available: z.array(assessmentOfferItem),
+});
+export type MyAssessmentsResponse = z.infer<typeof myAssessmentsResponse>;
+
+export const staffAssessmentBody = z.object({
+  name: z.string().trim().min(1).max(190),
+  description_markdown: z.string().max(20000).nullable().optional(),
+  type: assessmentType,
+  status: assessmentStatus.default("draft"),
+  begin_at: z.number().int().nullable().optional(),
+  end_at: z.number().int().nullable().optional(),
+  duration_days: z.number().int().min(0).max(3650).default(0),
+  recurring: z.enum(["none", "daily", "weekly", "monthly"]).default("none"),
+  filters: assessmentFilters.default({}),
+  requirements: assessmentRequirements,
+  reward: assessmentReward.default({}),
+  penalty: assessmentPenalty.default({}),
+  max_participants: z.number().int().min(0).default(0),
+  allow_concurrent: z.boolean().default(false),
+  settle_early: z.boolean().default(true),
+});
+export type StaffAssessmentBody = z.infer<typeof staffAssessmentBody>;
+
+export const staffAssessmentUpdateBody = staffAssessmentBody.partial();
+export type StaffAssessmentUpdateBody = z.infer<typeof staffAssessmentUpdateBody>;
+
+export const staffAssessmentItem = staffAssessmentBody.extend({
+  id: z.number().int(),
+  created_by: z.number().int(),
+  created_at: z.number(),
+  updated_at: z.number(),
+  participants: z.number().int(),
+  active_participants: z.number().int(),
+  passed: z.number().int(),
+  failed: z.number().int(),
+});
+export type StaffAssessmentItem = z.infer<typeof staffAssessmentItem>;
+
+export const staffAssessmentListResponse = z.object({ items: z.array(staffAssessmentItem) });
+export type StaffAssessmentListResponse = z.infer<typeof staffAssessmentListResponse>;
+
+export const staffAssessmentPreviewResponse = z.object({ matched: z.number().int() });
+export type StaffAssessmentPreviewResponse = z.infer<typeof staffAssessmentPreviewResponse>;
+
+export const staffAssessmentAssignBody = z.object({
+  user_ids: z.array(z.number().int().positive()).min(1).max(5000),
+});
+export type StaffAssessmentAssignBody = z.infer<typeof staffAssessmentAssignBody>;
+
+export const staffAssessmentAssignResponse = z.object({
+  assigned: z.number().int(),
+  skipped: z.number().int(),
+});
+export type StaffAssessmentAssignResponse = z.infer<typeof staffAssessmentAssignResponse>;
+
+export const staffAssessmentParticipant = z.object({
+  assignment_id: z.number().int(),
+  user_id: z.number().int(),
+  username: z.string(),
+  status: assessmentAssignmentStatus,
+  begin_at: z.number(),
+  end_at: z.number(),
+  progress: z.array(assessmentProgressItem),
+  result_reason: z.string().nullable(),
+  completed_at: z.number().nullable(),
+});
+export type StaffAssessmentParticipant = z.infer<typeof staffAssessmentParticipant>;
+
+export const staffAssessmentParticipantsResponse = z.object({
+  items: z.array(staffAssessmentParticipant),
+});
+export type StaffAssessmentParticipantsResponse = z.infer<typeof staffAssessmentParticipantsResponse>;
+
 /* ============================ Staff 站内信 ============================ */
 
 export const staffMessageBody = z.object({

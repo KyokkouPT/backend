@@ -24,6 +24,7 @@ import { userRoutes } from "./routes/users.js";
 import { settingsRoutes } from "./routes/settings.js";
 import { staffAdminRoutes } from "./routes/staff-admin.js";
 import { staffMessageRoutes } from "./routes/staff-messages.js";
+import { assessmentRoutes } from "./routes/assessments.js";
 import { bonusShopRoutes } from "./routes/bonus-shop.js";
 import { classRoutes } from "./routes/classes.js";
 import { appealRoutes } from "./routes/appeals.js";
@@ -118,6 +119,7 @@ export function buildApp(deps: AppDeps, options: FastifyServerOptions = {}): Fas
   app.register(settingsRoutes({ db: deps.db }));
   app.register(staffAdminRoutes({ db: deps.db }));
   app.register(staffMessageRoutes({ db: deps.db }));
+  app.register(assessmentRoutes({ db: deps.db }));
   app.register(bonusShopRoutes({ db: deps.db }));
   app.register(classRoutes({ db: deps.db }));
   app.register(appealRoutes({ db: deps.db }));
