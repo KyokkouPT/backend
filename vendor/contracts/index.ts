@@ -1064,21 +1064,46 @@ export const staffSettings = z.object({
     max_peers: z.number().int().min(1),
     allow_ipv6: z.boolean(),
   }),
+});
+export type StaffSettings = z.infer<typeof staffSettings>;
+
+export const staffReviewSettings = z.object({
+  auto_approve_trusted: z.boolean(),
+  trusted_min_approved: z.number().int().min(0),
+  pending_alert_hours: z.number().int().min(0),
+});
+export type StaffReviewSettings = z.infer<typeof staffReviewSettings>;
+
+export const staffReviewSettingsResponse = z.object({ settings: staffReviewSettings });
+export type StaffReviewSettingsResponse = z.infer<typeof staffReviewSettingsResponse>;
+
+export const updateStaffReviewSettingsBody = staffReviewSettings.partial();
+export type UpdateStaffReviewSettingsBody = z.infer<typeof updateStaffReviewSettingsBody>;
+
+export const staffSettingsResponse = z.object({ settings: staffSettings });
+export type StaffSettingsResponse = z.infer<typeof staffSettingsResponse>;
+
+export const updateStaffSettingsBody = z.object({
+  site: staffSettings.shape.site.partial().optional(),
+  registration: staffSettings.shape.registration.partial().optional(),
+  tracker: staffSettings.shape.tracker.partial().optional(),
+});
+export type UpdateStaffSettingsBody = z.infer<typeof updateStaffSettingsBody>;
+
+export const staffOperationsSettings = z.object({
   economy: z.object({
     bonus_enabled: z.boolean(),
     exchange_enabled: z.boolean(),
     request_min_bounty: z.number().int().min(0),
     request_max_bounty: z.number().int().min(0),
   }),
-  review: z.object({
-    auto_approve_trusted: z.boolean(),
-    trusted_min_approved: z.number().int().min(0),
-    pending_alert_hours: z.number().int().min(1),
-  }),
-  classes: z.object({
-    recalc_enabled: z.boolean(),
-    recalc_cron: z.string().min(5).max(64),
-    next_run_at: z.number().nullable().optional(),
+  shop: z.object({
+    rename_cooldown_days: z.number().int().min(0).max(3650),
+    username_reserve_days: z.number().int().min(0).max(3650),
+    rename_refund_ratio: z.number().min(0).max(1),
+    gift_max_per_transaction: z.number().int().min(-1),
+    gift_message_max_length: z.number().int().min(0).max(2000),
+    hnr_credit_expire_days: z.number().int().min(-1).max(3650),
   }),
   bonus: z.object({
     cron: z.string().min(5).max(64),
@@ -1090,38 +1115,6 @@ export const staffSettings = z.object({
     formula: z.string().min(1).max(2000),
     default_formula: z.string().optional(),
   }),
-  shop: z.object({
-    rename_cooldown_days: z.number().int().min(0).max(3650),
-    username_reserve_days: z.number().int().min(0).max(3650),
-    rename_refund_ratio: z.number().min(0).max(1),
-    gift_max_per_transaction: z.number().int().min(-1),
-    gift_message_max_length: z.number().int().min(0).max(2000),
-    hnr_credit_expire_days: z.number().int().min(-1).max(3650),
-  }),
-});
-export type StaffSettings = z.infer<typeof staffSettings>;
-
-export const staffSettingsResponse = z.object({ settings: staffSettings });
-export type StaffSettingsResponse = z.infer<typeof staffSettingsResponse>;
-
-export const updateStaffSettingsBody = z.object({
-  site: staffSettings.shape.site.partial().optional(),
-  registration: staffSettings.shape.registration.partial().optional(),
-  tracker: staffSettings.shape.tracker.partial().optional(),
-  economy: staffSettings.shape.economy.partial().optional(),
-  review: staffSettings.shape.review.partial().optional(),
-  classes: staffSettings.shape.classes.omit({ next_run_at: true }).partial().optional(),
-  bonus: staffSettings.shape.bonus.omit({ next_run_at: true, default_formula: true }).partial().optional(),
-  seed_points: staffSettings.shape.seed_points.omit({ default_formula: true }).partial().optional(),
-  shop: staffSettings.shape.shop.partial().optional(),
-});
-export type UpdateStaffSettingsBody = z.infer<typeof updateStaffSettingsBody>;
-
-export const staffOperationsSettings = z.object({
-  economy: staffSettings.shape.economy,
-  shop: staffSettings.shape.shop,
-  bonus: staffSettings.shape.bonus,
-  seed_points: staffSettings.shape.seed_points,
 });
 export type StaffOperationsSettings = z.infer<typeof staffOperationsSettings>;
 
@@ -1129,10 +1122,16 @@ export const staffOperationsResponse = z.object({ settings: staffOperationsSetti
 export type StaffOperationsResponse = z.infer<typeof staffOperationsResponse>;
 
 export const updateStaffOperationsBody = z.object({
-  economy: staffSettings.shape.economy.partial().optional(),
-  shop: staffSettings.shape.shop.partial().optional(),
-  bonus: staffSettings.shape.bonus.omit({ next_run_at: true, default_formula: true }).partial().optional(),
-  seed_points: staffSettings.shape.seed_points.omit({ default_formula: true }).partial().optional(),
+  economy: staffOperationsSettings.shape.economy.partial().optional(),
+  shop: staffOperationsSettings.shape.shop.partial().optional(),
+  bonus: staffOperationsSettings.shape.bonus
+    .omit({ next_run_at: true, default_formula: true })
+    .partial()
+    .optional(),
+  seed_points: staffOperationsSettings.shape.seed_points
+    .omit({ default_formula: true })
+    .partial()
+    .optional(),
 });
 export type UpdateStaffOperationsBody = z.infer<typeof updateStaffOperationsBody>;
 

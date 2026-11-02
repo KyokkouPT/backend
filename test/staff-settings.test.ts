@@ -75,6 +75,33 @@ describe("staff settings", () => {
     expect((rules.json() as { content: string }).content).toContain("**规则**");
   });
 
+  it("manages review settings with staff.review", async () => {
+    const current = await ctx.app.inject({
+      method: "GET",
+      url: `${API_PREFIX}/staff/review/settings`,
+      headers: { cookie: admin.cookieHeader },
+    });
+    expect(current.statusCode).toBe(200);
+    const updated = await ctx.app.inject({
+      method: "PUT",
+      url: `${API_PREFIX}/staff/review/settings`,
+      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
+      payload: { pending_alert_hours: 12 },
+    });
+    expect(updated.statusCode).toBe(200);
+    expect(
+      (updated.json() as { settings: { pending_alert_hours: number } }).settings
+        .pending_alert_hours,
+    ).toBe(12);
+
+    const denied = await ctx.app.inject({
+      method: "GET",
+      url: `${API_PREFIX}/staff/review/settings`,
+      headers: { cookie: user.cookieHeader },
+    });
+    expect(denied.statusCode).toBe(403);
+  });
+
   it("manages operations settings with an independent permission", async () => {
     const current = await ctx.app.inject({
       method: "GET",
@@ -246,7 +273,7 @@ describe("staff settings", () => {
   it("saves independent bonus/class schedules and validates formulas", async () => {
     const initial = await ctx.app.inject({
       method: "GET",
-      url: `${API_PREFIX}/staff/settings`,
+      url: `${API_PREFIX}/staff/operations`,
       headers: { cookie: admin.cookieHeader },
     });
     const body = initial.json() as {
@@ -257,7 +284,7 @@ describe("staff settings", () => {
 
     const invalidCron = await ctx.app.inject({
       method: "PUT",
-      url: `${API_PREFIX}/staff/settings`,
+      url: `${API_PREFIX}/staff/operations`,
       headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
       payload: { bonus: { cron: "* * * * *" } },
     });
@@ -265,7 +292,7 @@ describe("staff settings", () => {
 
     const invalidFormula = await ctx.app.inject({
       method: "PUT",
-      url: `${API_PREFIX}/staff/settings`,
+      url: `${API_PREFIX}/staff/operations`,
       headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
       payload: { bonus: { formula: "result = missing + 1" } },
     });
@@ -273,14 +300,19 @@ describe("staff settings", () => {
 
     const saved = await ctx.app.inject({
       method: "PUT",
-      url: `${API_PREFIX}/staff/settings`,
+      url: `${API_PREFIX}/staff/operations`,
       headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
-      payload: {
-        bonus: { cron: "30 * * * *", formula: "result = seeders + 1" },
-        classes: { recalc_cron: "0 4 * * *" },
-      },
+      payload: { bonus: { cron: "30 * * * *", formula: "result = seeders + 1" } },
     });
     expect(saved.statusCode).toBe(200);
+
+    const scheduler = await ctx.app.inject({
+      method: "PUT",
+      url: `${API_PREFIX}/staff/classes/scheduler`,
+      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
+      payload: { recalc_cron: "0 4 * * *" },
+    });
+    expect(scheduler.statusCode).toBe(200);
 
     const preview = await ctx.app.inject({
       method: "POST",

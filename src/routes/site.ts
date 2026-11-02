@@ -103,6 +103,7 @@ function buildNav(options: { loggedIn: boolean; staffPermissions: string[] }): S
         label: "内容审核",
         items: [
           { key: "staff-review", href: "/staff/review", label: "审核台", icon: "clipboard-check" },
+          { key: "staff-review-settings", href: "/staff/review/settings", label: "审核设置", icon: "settings" },
           { key: "staff-reports", href: "/staff/reports", label: "举报", icon: "alert-triangle" },
           { key: "staff-anomalies", href: "/staff/anomalies", label: "反作弊", icon: "shield-alert" },
         ],

@@ -77,22 +77,9 @@ export function staffSettingsRoutes(deps: { db: Db }): FastifyPluginAsync {
       const settings = await loadSettings(db);
       return staffSettingsResponse.parse({
         settings: {
-          ...settings,
-          classes: {
-            ...settings.classes,
-            next_run_at: settings.classes.recalc_enabled
-              ? nextRunAt(settings.classes.recalc_cron)
-              : null,
-          },
-          bonus: {
-            ...settings.bonus,
-            next_run_at: nextRunAt(settings.bonus.cron),
-            default_formula: DEFAULT_BONUS_FORMULA,
-          },
-          seed_points: {
-            ...settings.seed_points,
-            default_formula: DEFAULT_SEED_POINTS_FORMULA,
-          },
+          site: settings.site,
+          registration: settings.registration,
+          tracker: settings.tracker,
         },
       });
     });
@@ -103,66 +90,15 @@ export function staffSettingsRoutes(deps: { db: Db }): FastifyPluginAsync {
       const body = parseOrThrow(updateStaffSettingsBody, request.body ?? {});
       const current = await loadSettings(db);
 
-      const merged = {
+      const merged = settingsSchema.parse({
+        ...current,
         site: { ...current.site, ...(body.site ?? {}) },
         registration: { ...current.registration, ...(body.registration ?? {}) },
         tracker: { ...current.tracker, ...(body.tracker ?? {}) },
-        economy: { ...current.economy, ...(body.economy ?? {}) },
-        review: { ...current.review, ...(body.review ?? {}) },
-        classes: { ...current.classes, ...(body.classes ?? {}) },
-        bonus: { ...current.bonus, ...(body.bonus ?? {}) },
-        seed_points: { ...current.seed_points, ...(body.seed_points ?? {}) },
-        shop: { ...current.shop, ...(body.shop ?? {}) },
-      };
-      const validated = settingsSchema.parse(merged);
+      });
 
-      if (body.classes !== undefined) {
-        const checked = nextRunAt(validated.classes.recalc_cron);
-        if (checked === null) {
-          throw new HttpProblem(400, "invalid_cron", "cron 表达式无效或间隔小于 5 分钟");
-        }
-      }
-
-      if (body.bonus !== undefined) {
-        const checked = nextRunAt(validated.bonus.cron);
-        if (checked === null) {
-          throw new HttpProblem(400, "invalid_cron", "魔力值 cron 表达式无效或间隔小于 5 分钟");
-        }
-        try {
-          compileFormula(validated.bonus.formula);
-        } catch (error) {
-          if (error instanceof FormulaError) {
-            throw new HttpProblem(
-              400,
-              "invalid_formula",
-              `公式错误（${String(error.line)}:${String(error.column)}）：${error.message}`,
-            );
-          }
-          throw error;
-        }
-      }
-
-      if (body.seed_points !== undefined) {
-        try {
-          compileFormula(validated.seed_points.formula);
-        } catch (error) {
-          if (error instanceof FormulaError) {
-            throw new HttpProblem(
-              400,
-              "invalid_formula",
-              `做种积分公式错误（${String(error.line)}:${String(error.column)}）：${error.message}`,
-            );
-          }
-          throw error;
-        }
-      }
-
-      for (const key of SETTING_KEYS) {
-        if (body[key] !== undefined) await saveSetting(db, key, validated[key]);
-      }
-
-      if (body.classes !== undefined || body.bonus !== undefined) {
-        await reloadSchedulers(db);
+      for (const key of ["site", "registration", "tracker"] as const) {
+        if (body[key] !== undefined) await saveSetting(db, key, merged[key]);
       }
 
       await db
@@ -178,7 +114,13 @@ export function staffSettingsRoutes(deps: { db: Db }): FastifyPluginAsync {
         })
         .execute();
 
-      return staffSettingsResponse.parse({ settings: validated });
+      return staffSettingsResponse.parse({
+        settings: {
+          site: merged.site,
+          registration: merged.registration,
+          tracker: merged.tracker,
+        },
+      });
     });
 
     app.get(`${API_PREFIX}/staff/operations`, async (request) => {

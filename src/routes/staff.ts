@@ -5,8 +5,11 @@ import {
   reviewActionResponse,
   reviewQueueResponse,
   reviewReasonsResponse,
+  staffReviewSettingsResponse,
+  updateStaffReviewSettingsBody,
   type ReviewReason,
 } from "@kyokkou/contracts";
+import { settingsSchema } from "@kyokkou/config";
 import type { AppConfig } from "../config.js";
 import type { Db } from "../db/db.js";
 import { assertCsrf, requireAuth } from "../auth/csrf.js";
@@ -14,6 +17,8 @@ import { permissionsFor } from "../auth/permissions.js";
 import { HttpProblem, badRequest, conflict, notFound } from "../lib/problem.js";
 import { createNotification } from "../lib/notifications.js";
 import { loadReviewQueue } from "../lib/torrent-query.js";
+import { loadSettings } from "../lib/settings.js";
+import { parseOrThrow } from "../lib/validate.js";
 
 const REVIEW_REASONS: ReviewReason[] = [
   {
@@ -47,9 +52,55 @@ function requirePermission(request: FastifyRequest, permission: string) {
   return auth;
 }
 
+async function saveReviewSettings(db: Db, value: unknown): Promise<void> {
+  const now = Date.now();
+  const updated = await db
+    .updateTable("site_settings")
+    .set({ value_json: JSON.stringify(value), updated_at: now })
+    .where("key", "=", "review")
+    .execute();
+  if (Number(updated[0]?.numUpdatedRows ?? 0) === 0) {
+    await db
+      .insertInto("site_settings")
+      .values({ key: "review", value_json: JSON.stringify(value), updated_at: now })
+      .execute();
+  }
+}
+
 export function staffRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginAsync {
   return async (app) => {
     const { db } = deps;
+
+    app.get(`${API_PREFIX}/staff/review/settings`, async (request) => {
+      requirePermission(request, PERMISSIONS.staffReview);
+      const settings = await loadSettings(db);
+      return staffReviewSettingsResponse.parse({ settings: settings.review });
+    });
+
+    app.put(`${API_PREFIX}/staff/review/settings`, async (request) => {
+      const auth = requirePermission(request, PERMISSIONS.staffReview);
+      assertCsrf(request, auth.session);
+      const body = parseOrThrow(updateStaffReviewSettingsBody, request.body ?? {});
+      const current = await loadSettings(db);
+      const merged = settingsSchema.parse({
+        ...current,
+        review: { ...current.review, ...body },
+      });
+      await saveReviewSettings(db, merged.review);
+      await db
+        .insertInto("audit_logs")
+        .values({
+          actor_id: Number(auth.user.id),
+          action: "review.settings.update",
+          target_type: "settings",
+          target_id: "review",
+          detail_json: JSON.stringify(body),
+          ip: request.ip,
+          created_at: Date.now(),
+        })
+        .execute();
+      return staffReviewSettingsResponse.parse({ settings: merged.review });
+    });
 
     app.get(`${API_PREFIX}/staff/review`, async (request) => {
       requirePermission(request, PERMISSIONS.staffReview);
