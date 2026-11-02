@@ -179,6 +179,8 @@ export async function toStaffAssessment(db: Db, row: AssessmentRow): Promise<Sta
     max_participants: Number(row.max_participants),
     allow_concurrent: Number(row.allow_concurrent) === 1,
     settle_early: Number(row.settle_early) === 1,
+    auto_assign: Number(row.auto_assign) === 1,
+    priority: Number(row.priority),
     created_by: Number(row.created_by),
     created_at: Number(row.created_at),
     updated_at: Number(row.updated_at),
@@ -623,6 +625,50 @@ export async function restoreSuspendedUsers(db: Db): Promise<number> {
   return Number(result.numUpdatedRows ?? 0);
 }
 
+/** NexusPHP 风格的“自动发现”扫描：给没有进行中考核的用户分配 active exam。 */
+export async function autoAssignAssessments(db: Db): Promise<number> {
+  const assessments = await db
+    .selectFrom("assessments")
+    .selectAll()
+    .where("status", "=", "active")
+    .where("type", "=", "exam")
+    .where("auto_assign", "=", 1)
+    .orderBy("priority", "desc")
+    .orderBy("id", "asc")
+    .execute();
+  let assigned = 0;
+  for (const row of assessments) {
+    const assessment = parseAssessment(row);
+    if (assessment.row.recurring !== "none") continue;
+    const users = await resolveAssessmentUsers(db, assessment.filters);
+    for (const user of users) {
+      const alreadyAssigned = await db
+        .selectFrom("assessment_assignments")
+        .select("id")
+        .where("assessment_id", "=", Number(assessment.row.id))
+        .where("user_id", "=", user.id)
+        .executeTakeFirst();
+      if (alreadyAssigned) continue;
+      const activeExam = await db
+        .selectFrom("assessment_assignments as a")
+        .innerJoin("assessments as s", "s.id", "a.assessment_id")
+        .select("a.id")
+        .where("a.user_id", "=", user.id)
+        .where("a.status", "in", [...ACTIVE_STATUSES])
+        .where("s.type", "=", "exam")
+        .executeTakeFirst();
+      if (activeExam) continue;
+      try {
+        await createAssignment(db, assessment, Number(user.id), null, "assign");
+        assigned += 1;
+      } catch {
+        // 已分配、人数满、筛选变化等都不阻塞其他用户
+      }
+    }
+  }
+  return assigned;
+}
+
 export async function resolveAssessmentUsers(
   db: Db,
   filters: Record<string, unknown>,
@@ -661,6 +707,7 @@ export async function createAssignment(
   assessment: ParsedAssessment,
   userId: number,
   assignedBy: number | null,
+  source: "claim" | "assign" = "assign",
 ): Promise<AssignmentRow> {
   if (assessment.row.recurring !== "none") {
     throw badRequest("recurring_not_supported", "周期考核暂未开放");
@@ -721,7 +768,7 @@ export async function createAssignment(
       assessment_id: Number(assessment.row.id),
       user_id: userId,
       period_key: periodKey,
-      status: assignedBy === null ? "claimed" : "assigned",
+      status: source === "claim" ? "claimed" : "assigned",
       assigned_by: assignedBy,
       assigned_at: now,
       begin_at: beginAt,
@@ -745,7 +792,7 @@ export async function createAssignment(
   await createNotification(db, {
     userId,
     kind: "assessment",
-    title: assignedBy === null ? "任务已领取" : "收到新考核/任务",
+    title: source === "claim" ? "任务已领取" : "收到新考核/任务",
     body: `你已获得「${assessment.row.name}」，截止时间：${new Date(endAt).toLocaleString("zh-CN")}。`,
     linkUrl: `/assessments/${String(assignment.id)}`,
   });
@@ -822,6 +869,9 @@ export async function listParticipants(
 
 export function validateAssessmentBody(body: StaffAssessmentBody): void {
   if (body.recurring !== "none") throw badRequest("recurring_not_supported", "周期考核暂未开放");
+  if (body.auto_assign && body.type !== "exam") {
+    throw badRequest("auto_assign_exam_only", "只有考核可以开启自动发现");
+  }
   if (body.end_at !== null && body.end_at !== undefined && body.end_at <= Date.now()) {
     throw badRequest("invalid_time_range", "结束时间必须晚于当前时间");
   }
@@ -867,6 +917,8 @@ export async function createAssessmentRecord(
       max_participants: body.max_participants,
       allow_concurrent: body.allow_concurrent ? 1 : 0,
       settle_early: body.settle_early ? 1 : 0,
+      auto_assign: body.auto_assign ? 1 : 0,
+      priority: body.priority,
       created_by: actorId,
       created_at: now,
       updated_at: now,
@@ -918,6 +970,8 @@ export async function updateAssessmentRecord(
       max_participants: body.max_participants,
       allow_concurrent: body.allow_concurrent ? 1 : 0,
       settle_early: body.settle_early ? 1 : 0,
+      auto_assign: body.auto_assign ? 1 : 0,
+      priority: body.priority,
       updated_at: Date.now(),
     })
     .where("id", "=", id)

@@ -50,6 +50,7 @@ describe("migrations", () => {
         { version: 20, name: "tracker_sessions" },
         { version: 21, name: "staff_message_jobs" },
         { version: 22, name: "assessments" },
+        { version: 23, name: "assessment_auto" },
       ]);
 
       const users = await db.selectFrom("users").selectAll().execute();

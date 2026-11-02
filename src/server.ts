@@ -6,6 +6,7 @@ import { settleHnr } from "./lib/hnr.js";
 import { initSchedulers, stopSchedulers } from "./lib/scheduler.js";
 import { processQueuedStaffMessageJobs } from "./routes/staff-messages.js";
 import {
+  autoAssignAssessments,
   checkoutDueAssessments,
   restoreSuspendedUsers,
   updateActiveAssessments,
@@ -126,6 +127,15 @@ async function main(): Promise<void> {
       .catch((error: unknown) => app.log.error(error, "suspended restore failed"));
   }, 60 * 1000);
   suspendedRestoreTimer.unref();
+
+  const assessmentAutoAssignTimer = setInterval(() => {
+    void autoAssignAssessments(db)
+      .then((assigned) => {
+        if (assigned > 0) app.log.info({ assigned }, "assessments auto-assigned");
+      })
+      .catch((error: unknown) => app.log.error(error, "assessment auto-assign failed"));
+  }, 60 * 1000);
+  assessmentAutoAssignTimer.unref();
 
   // 魔力值与等级重算调度：两条 cron 独立，共用一个调度器进程。
   initSchedulers(db, app.log, config.instanceId);

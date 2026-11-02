@@ -70,7 +70,7 @@ export function assessmentRoutes(deps: { db: Db }): FastifyPluginAsync {
       if (!row || row.status !== "active" || row.type !== "task") {
         throw badRequest("assessment_unavailable", "该任务当前不可领取");
       }
-      const assignment = await createAssignment(db, parseAssessment(row), Number(auth.user.id), null);
+      const assignment = await createAssignment(db, parseAssessment(row), Number(auth.user.id), null, "claim");
       const item = await getMyAssignment(db, Number(auth.user.id), Number(assignment.id));
       if (!item) throw notFound("assessment_assignment_not_found", "考核/任务不存在");
       return assessmentAssignmentItem.parse(item);

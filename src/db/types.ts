@@ -522,6 +522,8 @@ export interface AssessmentsTable {
   max_participants: number;
   allow_concurrent: number;
   settle_early: number;
+  auto_assign: number;
+  priority: number;
   created_by: number;
   created_at: number;
   updated_at: number;

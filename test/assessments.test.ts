@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { API_PREFIX } from "@kyokkou/contracts";
 import {
+  autoAssignAssessments,
   checkoutDueAssessments,
   updateActiveAssessments,
 } from "../src/lib/assessments.js";
@@ -48,6 +49,40 @@ afterAll(async () => {
 });
 
 describe("assessments", () => {
+  it("auto-discovers eligible users and does not duplicate them", async () => {
+    const target = await ctx.db
+      .selectFrom("users")
+      .select("id")
+      .where("username", "=", "root")
+      .executeTakeFirstOrThrow();
+    const created = await ctx.app.inject({
+      method: "POST",
+      url: `${API_PREFIX}/staff/assessments`,
+      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
+      payload: assessmentPayload({
+        name: "自动发现考核",
+        type: "exam",
+        auto_assign: true,
+        priority: 100,
+        filters: { user_ids: [Number(target.id)] },
+      }),
+    });
+    expect(created.statusCode).toBe(201);
+    const assessment = created.json() as { id: number };
+
+    await autoAssignAssessments(ctx.db);
+    await autoAssignAssessments(ctx.db);
+
+    const rows = await ctx.db
+      .selectFrom("assessment_assignments")
+      .select(["status"])
+      .where("assessment_id", "=", assessment.id)
+      .where("user_id", "=", Number(target.id))
+      .execute();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.status).toBe("assigned");
+  });
+
   it("creates, claims, tracks progress and settles early with reward", async () => {
     const created = await ctx.app.inject({
       method: "POST",

@@ -1384,6 +1384,8 @@ export const staffAssessmentBody = z.object({
   max_participants: z.number().int().min(0).default(0),
   allow_concurrent: z.boolean().default(false),
   settle_early: z.boolean().default(true),
+  auto_assign: z.boolean().default(false),
+  priority: z.number().int().min(0).max(10000).default(0),
 });
 export type StaffAssessmentBody = z.infer<typeof staffAssessmentBody>;
 
