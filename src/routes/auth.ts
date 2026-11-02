@@ -241,6 +241,7 @@ export function authRoutes(deps: { db: Db; config: AppConfig }): FastifyPluginAs
               uploaded: 0,
               downloaded: 0,
               bonus: 0,
+              seed_points: 0,
               seedtime: 0,
               invited_by: inviterId,
               created_at: now,

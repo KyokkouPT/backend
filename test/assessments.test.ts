@@ -10,6 +10,7 @@ import { createTestContext, login, TEST_PASSWORD, type LoggedIn, type TestContex
 let ctx: TestContext;
 let admin: LoggedIn;
 let axue: LoggedIn;
+let root: LoggedIn;
 
 const GB = 1024 ** 3;
 
@@ -41,6 +42,7 @@ beforeAll(async () => {
   ctx = await createTestContext();
   admin = await login(ctx.app);
   axue = await login(ctx.app, "axue", TEST_PASSWORD);
+  root = await login(ctx.app, "root", TEST_PASSWORD);
 });
 
 afterAll(async () => {
@@ -81,6 +83,80 @@ describe("assessments", () => {
       .execute();
     expect(rows).toHaveLength(1);
     expect(rows[0]?.status).toBe("assigned");
+  });
+
+  it("tracks average seedtime and seed points deltas", async () => {
+    const created = await ctx.app.inject({
+      method: "POST",
+      url: `${API_PREFIX}/staff/assessments`,
+      headers: { cookie: admin.cookieHeader, "x-csrf-token": admin.csrfToken },
+      payload: assessmentPayload({
+        name: "平均做种与积分任务",
+        filters: { user_ids: [root.userId] },
+        requirements: {
+          logic: "all",
+          items: [
+            { metric: "average_seedtime", op: ">=", value: 1 },
+            { metric: "seed_points_delta", op: ">=", value: 50 },
+          ],
+        },
+      }),
+    });
+    expect(created.statusCode).toBe(201);
+    const assessment = created.json() as { id: number };
+    const claimed = await ctx.app.inject({
+      method: "POST",
+      url: `${API_PREFIX}/me/assessments/${String(assessment.id)}/claim`,
+      headers: { cookie: root.cookieHeader, "x-csrf-token": root.csrfToken },
+    });
+    expect(claimed.statusCode).toBe(200);
+    const assignment = claimed.json() as { id: number };
+
+    const torrent = await ctx.db
+      .selectFrom("torrents")
+      .select("id")
+      .orderBy("id", "asc")
+      .executeTakeFirstOrThrow();
+    const existing = await ctx.db
+      .selectFrom("snatches")
+      .select("id")
+      .where("user_id", "=", root.userId)
+      .where("torrent_id", "=", Number(torrent.id))
+      .executeTakeFirst();
+    if (existing) {
+      await ctx.db
+        .updateTable("snatches")
+        .set({ seedtime: 3600, status: "seeding" })
+        .where("id", "=", existing.id)
+        .execute();
+    } else {
+      await ctx.db
+        .insertInto("snatches")
+        .values({
+          user_id: root.userId,
+          torrent_id: Number(torrent.id),
+          uploaded: 0,
+          downloaded: 0,
+          seedtime: 3600,
+          last_announce_at: null,
+          status: "seeding",
+          completed_at: null,
+        })
+        .execute();
+    }
+    await ctx.db
+      .updateTable("users")
+      .set((eb) => ({ seed_points: eb("seed_points", "+", 50) }))
+      .where("id", "=", root.userId)
+      .execute();
+
+    await updateActiveAssessments(ctx.db);
+    const settled = await ctx.db
+      .selectFrom("assessment_assignments")
+      .select("status")
+      .where("id", "=", assignment.id)
+      .executeTakeFirstOrThrow();
+    expect(settled.status).toBe("passed");
   });
 
   it("creates, claims, tracks progress and settles early with reward", async () => {

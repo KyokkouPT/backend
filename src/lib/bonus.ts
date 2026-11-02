@@ -194,7 +194,11 @@ export async function runBonusSettlement(
         for (const update of updates) {
           await trx
             .updateTable("users")
-            .set((eb) => ({ bonus: eb("bonus", "+", update.delta), last_bonus_at: now }))
+            .set((eb) => ({
+              bonus: eb("bonus", "+", update.delta),
+              seed_points: eb("seed_points", "+", update.delta),
+              last_bonus_at: now,
+            }))
             .where("id", "=", update.id)
             .execute();
         }

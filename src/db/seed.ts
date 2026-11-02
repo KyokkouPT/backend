@@ -524,6 +524,7 @@ export async function seedDatabase(db: Db, options: { password: string }): Promi
           raw_uploaded: user.uploaded,
           raw_downloaded: user.downloaded,
           bonus: user.bonus,
+          seed_points: 0,
           seedtime: user.seedtime,
           invited_by: null,
           created_at: now - 180 * 24 * HOUR,

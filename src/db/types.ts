@@ -124,6 +124,7 @@ export interface UsersTable {
   raw_uploaded: number;
   raw_downloaded: number;
   bonus: number;
+  seed_points: number;
   seedtime: number;
   invited_by: number | null;
   created_at: number;

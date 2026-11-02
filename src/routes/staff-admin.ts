@@ -205,6 +205,7 @@ export function staffAdminRoutes(deps: { db: Db }): FastifyPluginAsync {
             uploaded: 0,
             downloaded: 0,
             bonus: 0,
+            seed_points: 0,
             seedtime: 0,
             invited_by: null,
             created_at: now,

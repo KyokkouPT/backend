@@ -108,6 +108,11 @@ describe("username migration", () => {
     const db = createDb({ driver: "sqlite", url: ":memory:" });
     try {
       await runMigrations(db, "sqlite", migrations.filter((item) => item.version < 14));
+      // 旧库测试只跑到 013，但 seed 会写入后续迁移新增的列。
+      await db.schema
+        .alterTable("users")
+        .addColumn("seed_points", "double precision", (col) => col.notNull().defaultTo(0))
+        .execute();
       await seedDatabase(db, { password: TEST_PASSWORD });
       await db.updateTable("users").set({ username: "Alice" }).where("username", "=", "lightbringer").execute();
       await db.updateTable("users").set({ username: "alice" }).where("username", "=", "root").execute();
@@ -138,6 +143,7 @@ describe("username migration", () => {
         })
         .execute();
 
+      await db.schema.alterTable("users").dropColumn("seed_points").execute();
       await runMigrations(db, "sqlite");
       const users = await db.selectFrom("users").select(["id", "username"]).orderBy("id").execute();
       expect(users.map((row) => row.username)).toEqual(["alice_2", "alice", "user3"]);

@@ -26,7 +26,9 @@ export const ASSESSMENT_METRIC_LABELS: Record<string, string> = {
   uploaded_delta: "上传增量",
   downloaded_delta: "下载增量",
   seedtime_delta: "做种时长增量",
+  average_seedtime: "平均做种时间",
   bonus_delta: "魔力增量",
+  seed_points_delta: "做种积分增量",
   published_delta: "发布种子数",
   ratio: "分享率",
   last_active_days: "最近活跃天数",
@@ -100,7 +102,6 @@ function requirementTarget(requirement: AssessmentRequirementItem): number {
   if (requirement.metric === "seedtime_delta") return requirement.value * 3600;
   return requirement.value;
 }
-
 function compare(current: number, op: AssessmentRequirementItem["op"], target: number): boolean {
   switch (op) {
     case ">=":
@@ -136,7 +137,6 @@ function progressDisplay(
     unit: traffic ? "GB" : null,
   };
 }
-
 function rawProgress(requirement: AssessmentRequirementItem, current: number, target: number) {
   return {
     metric: requirement.metric,
@@ -267,10 +267,14 @@ export async function computeProgress(
   if (!user) {
     return { passed: false, rows: [], display: [] };
   }
-  const baseline = parseJson<{ uploaded?: number; downloaded?: number; bonus?: number; seedtime?: number }>(
-    assignment.baseline_json,
-    {},
-  );
+  const baseline = parseJson<{
+    uploaded?: number;
+    downloaded?: number;
+    bonus?: number;
+    seedtime?: number;
+    seed_points?: number;
+    snatches?: Record<string, number>;
+  }>(assignment.baseline_json, {});
   const ratio = Number(user.downloaded) > 0 ? Number(user.uploaded) / Number(user.downloaded) : 9999;
   const lastActiveDays =
     user.last_seen_at === null
@@ -278,12 +282,32 @@ export async function computeProgress(
       : Math.max(0, Math.floor((Date.now() - Number(user.last_seen_at)) / 86_400_000));
   const published = await userPublishedSince(db, Number(user.id), Number(assignment.begin_at));
   const hnr = await userHnrUnfinished(db, Number(user.id));
+  const snatches = await db
+    .selectFrom("snatches")
+    .select(["torrent_id", "seedtime"])
+    .where("user_id", "=", Number(user.id))
+    .execute();
+  let averageSeedtime = 0;
+  if (assessment.requirements.items.some((item) => item.metric === "average_seedtime")) {
+    let totalDelta = 0;
+    let torrentCount = 0;
+    for (const snatch of snatches) {
+      const previous = Number(baseline.snatches?.[String(snatch.torrent_id)] ?? 0);
+      const delta = Math.max(0, Number(snatch.seedtime) - previous);
+      if (delta > 0) {
+        totalDelta += delta;
+        torrentCount += 1;
+      }
+    }
+    averageSeedtime = torrentCount > 0 ? totalDelta / torrentCount / 3600 : 0;
+  }
 
   const rows: { metric: string; current: number; target: number }[] = [];
   const display: AssessmentProgressItem[] = [];
   let passCount = 0;
 
-  for (const requirement of assessment.requirements.items) {    let current: number;
+  for (const requirement of assessment.requirements.items) {
+    let current: number;
     switch (requirement.metric) {
       case "uploaded_delta":
         current = Math.max(0, Number(user.uploaded) - Number(baseline.uploaded ?? user.uploaded));
@@ -294,8 +318,17 @@ export async function computeProgress(
       case "seedtime_delta":
         current = Math.max(0, Number(user.seedtime) - Number(baseline.seedtime ?? user.seedtime));
         break;
+      case "average_seedtime":
+        current = averageSeedtime;
+        break;
       case "bonus_delta":
         current = Math.max(0, Number(user.bonus) - Number(baseline.bonus ?? user.bonus));
+        break;
+      case "seed_points_delta":
+        current = Math.max(
+          0,
+          Number(user.seed_points) - Number(baseline.seed_points ?? user.seed_points),
+        );
         break;
       case "published_delta":
         current = published;
@@ -757,7 +790,17 @@ export async function createAssignment(
     uploaded: Number(user.uploaded),
     downloaded: Number(user.downloaded),
     bonus: Number(user.bonus),
+    seed_points: Number(user.seed_points),
     seedtime: Number(user.seedtime),
+    snatches: Object.fromEntries(
+      (
+        await db
+          .selectFrom("snatches")
+          .select(["torrent_id", "seedtime"])
+          .where("user_id", "=", userId)
+          .execute()
+      ).map((row) => [String(row.torrent_id), Number(row.seedtime)]),
+    ),
     snapshot_at: now,
   };
   const token = randomBytes(16).toString("hex");
